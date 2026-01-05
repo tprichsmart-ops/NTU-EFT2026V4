@@ -147,6 +147,51 @@ const downloadImportTemplate = () => {
     { wch: 35 }, { wch: 15 }, { wch: 15 }, { wch: 10 }
   ];
 
+  // --- Add Data Validation (Dropdowns) ---
+  // Range: Start from row 2 (index 1) to row 100 (index 99)
+  const range = { s: { r: 1, c: 0 }, e: { r: 100, c: 7 } };
+  
+  if (!ws['!dataValidation']) ws['!dataValidation'] = [];
+
+  // Column B (Index 1): 單位類別
+  for (let r = range.s.r; r <= range.e.r; ++r) {
+    ws['!dataValidation'].push({
+      sqref: window.XLSX.utils.encode_cell({r: r, c: 1}),
+      type: 'list',
+      operator: 'equal',
+      formula1: '"行政,學術"', 
+      showErrorMessage: true,
+      errorTitle: '輸入錯誤',
+      error: '請從下拉選單中選擇：行政 或 學術'
+    });
+  }
+
+  // Column C (Index 2): 獨立空間分組
+  for (let r = range.s.r; r <= range.e.r; ++r) {
+    ws['!dataValidation'].push({
+      sqref: window.XLSX.utils.encode_cell({r: r, c: 2}),
+      type: 'list',
+      operator: 'equal',
+      formula1: '"獨立空間,一般"',
+      showErrorMessage: true,
+      errorTitle: '輸入錯誤',
+      error: '請從下拉選單中選擇：獨立空間 或 一般'
+    });
+  }
+
+  // Column E (Index 4): 進攻狀態
+  for (let r = range.s.r; r <= range.e.r; ++r) {
+    ws['!dataValidation'].push({
+      sqref: window.XLSX.utils.encode_cell({r: r, c: 4}),
+      type: 'list',
+      operator: 'equal',
+      formula1: '"進攻中,已進攻暫定結案,本牌客戶"',
+      showErrorMessage: true,
+      errorTitle: '輸入錯誤',
+      error: '請從下拉選單中選擇有效狀態'
+    });
+  }
+
   const wb = window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(wb, ws, '匯入範例');
   window.XLSX.writeFile(wb, `進攻對象匯入範例_${new Date().toISOString().slice(0,10)}.xlsx`);
@@ -1927,10 +1972,10 @@ const App = () => {
                     current: null,
                   }))
                 }
-                className={`${styles.btnSecondary} ${
+                className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent ${
                   mapState.isDrawing
-                    ? 'bg-rose-500 text-white border-transparent hover:bg-rose-600'
-                    : 'bg-slate-600 text-white border-transparent hover:bg-slate-500'
+                    ? 'bg-rose-500 text-white hover:bg-rose-600'
+                    : 'bg-slate-600 text-white hover:bg-slate-500'
                 }`}
                 disabled={!uploadedMapUrl}
               >
@@ -1965,14 +2010,11 @@ const App = () => {
             onMouseMove={handleMouseMove}
           >
             {uploadedMapUrl ? (
-                <div
-                className="w-full h-full transition-transform duration-500 ease-out"
-                style={{
-                    backgroundImage: `url(${uploadedMapUrl})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                }}
-                ></div>
+                <img 
+                  src={uploadedMapUrl} 
+                  alt="Campus Map" 
+                  className="w-full h-full object-cover transition-transform duration-500 ease-out"
+                />
             ) : (
                 <div className="w-full h-full flex items-center justify-center text-slate-400">
                     <p>請上傳地圖圖片</p>
