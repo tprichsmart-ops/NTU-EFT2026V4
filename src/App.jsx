@@ -40,13 +40,14 @@ import {
   Target,
   Image as ImageIcon,
   UploadCloud,
+  FileUp,
+  AlertCircle
 } from 'lucide-react';
 
 // --- Global Firebase Configuration and Utility Functions ---
 
 // FIX: Use __app_id directly without regex replacement to avoid path mismatch permissions errors
-const appId =
-  typeof __app_id !== 'undefined' ? __app_id : 'ntu-strategy-default-app';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'ntu-strategy-default-app';
 
 const firebaseConfig =
   typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
@@ -95,7 +96,7 @@ const compressImage = (file) => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-
+        
         // Compress to JPEG with 0.6 quality (High compression, decent visibility)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
         resolve(dataUrl);
@@ -106,24 +107,61 @@ const compressImage = (file) => {
   });
 };
 
+// --- Data Validation Helper ---
+const checkUnitCompleteness = (unit) => {
+  // Define required fields
+  const requiredFields = ['name', 'category', 'buildingId', 'attackStatus'];
+  const missing = requiredFields.filter(field => !unit[field]);
+  return missing.length === 0;
+};
+
+// --- Excel Import/Template Helpers ---
+const downloadImportTemplate = () => {
+  if (typeof window.XLSX === 'undefined') {
+    alert('Excel 工具尚未載入，請稍候再試');
+    return;
+  }
+  
+  // Headers with explicit instructions in styling/text
+  const headers = [
+    '單位名稱 (必填)',
+    '單位類別 (請填: 行政/學術)',
+    '獨立空間分組 (請填: 獨立空間/一般)',
+    '棟別代號 (必填)',
+    '進攻狀態 (請填: 進攻中/已進攻暫定結案/本牌客戶)',
+    '承辦姓名',
+    '電話',
+    '區域編號'
+  ];
+
+  const sampleData = [
+    ['範例系辦', '學術', '獨立空間', 'B2', '進攻中', '王小明', '02-33661234', 'A-01'],
+    ['範例處室', '行政', '一般', 'A1', '本牌客戶', '李大同', '02-33665678', 'B-02']
+  ];
+
+  const ws = window.XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+  
+  // Set column widths
+  ws['!cols'] = [
+    { wch: 20 }, { wch: 25 }, { wch: 30 }, { wch: 15 }, 
+    { wch: 35 }, { wch: 15 }, { wch: 15 }, { wch: 10 }
+  ];
+
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, '匯入範例');
+  window.XLSX.writeFile(wb, `進攻對象匯入範例_${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+
 // --- Styles Constants ---
 const styles = {
-  formInput:
-    'w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none',
-  formSelect:
-    'w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none',
-  formTextarea:
-    'w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none',
-  btnPrimary:
-    'px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/30 flex items-center justify-center font-medium active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed',
-  btnSecondary:
-    'px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-sm flex items-center justify-center font-medium active:scale-95',
-  btnDanger:
-    'px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-100 transition flex items-center justify-center font-medium disabled:opacity-50 disabled:cursor-not-allowed',
-  btnInfo:
-    'px-4 py-2 bg-sky-50 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-100 transition flex items-center justify-center font-medium',
-  checkbox:
-    'w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500',
+  formInput: "w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none",
+  formSelect: "w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none",
+  formTextarea: "w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none",
+  btnPrimary: "px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/30 flex items-center justify-center font-medium active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed",
+  btnSecondary: "px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-sm flex items-center justify-center font-medium active:scale-95",
+  btnDanger: "px-4 py-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-100 transition flex items-center justify-center font-medium disabled:opacity-50 disabled:cursor-not-allowed",
+  btnInfo: "px-4 py-2 bg-sky-50 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-100 transition flex items-center justify-center font-medium",
+  checkbox: "w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
 };
 
 // --- Initial Data Structures for Defaults ---
@@ -163,8 +201,7 @@ const initialSettings = {
     },
   ],
   areaMap: [],
-  uploadedMapUrl:
-    'https://placehold.co/1200x600/3B82F6/FFFFFF?text=Upload+Your+Campus+Map',
+  uploadedMapUrl: 'https://placehold.co/1200x600/3B82F6/FFFFFF?text=Upload+Your+Campus+Map',
 };
 
 // --- Custom Hook for Excel Export ---
@@ -260,9 +297,7 @@ const App = () => {
   const exportToExcel = useExcelExport();
 
   useEffect(() => {
-    const existingScript = document.querySelector(
-      'script[src="https://cdn.tailwindcss.com"]'
-    );
+    const existingScript = document.querySelector('script[src="https://cdn.tailwindcss.com"]');
     if (!existingScript) {
       const script = document.createElement('script');
       script.src = 'https://cdn.tailwindcss.com';
@@ -271,13 +306,15 @@ const App = () => {
   }, []);
 
   const getUnitCollectionRef = useCallback(
-    (database) =>
-      collection(database, 'artifacts', appId, 'public', 'data', 'units'),
+    (database) => collection(database, 'artifacts', appId, 'public', 'data', 'units'),
     []
   );
   const getPrivateDocRef = useCallback(
     (database, uid, collectionName, docId) =>
-      doc(database, 'artifacts', appId, 'users', uid, collectionName, docId),
+      doc(
+        database,
+        'artifacts', appId, 'users', uid, collectionName, docId
+      ),
     []
   );
 
@@ -289,8 +326,7 @@ const App = () => {
       }
 
       // FIX: Check if app is already initialized to prevent "duplicate app" errors
-      const app =
-        getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+      const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const database = getFirestore(app);
       const authentication = getAuth(app);
 
@@ -306,10 +342,7 @@ const App = () => {
           }
         } catch (e) {
           console.error('Authentication failed:', e);
-          setGlobalMessage({
-            text: '驗證失敗，請重新整理頁面。',
-            type: 'error',
-          });
+          setGlobalMessage({ text: '驗證失敗，請重新整理頁面。', type: 'error' });
           setIsLoading(false);
         }
       };
@@ -400,10 +433,7 @@ const App = () => {
     } catch (e) {
       console.error('Error updating private data:', e);
       if (e.code === 'permission-denied') {
-        setGlobalMessage({
-          text: '權限不足或檔案過大 (限制 1MB)',
-          type: 'error',
-        });
+        setGlobalMessage({ text: '權限不足或檔案過大 (限制 1MB)', type: 'error' });
       } else {
         setGlobalMessage({ text: `資料更新失敗: ${e.message}`, type: 'error' });
       }
@@ -445,12 +475,8 @@ const App = () => {
   const LoadingState = () => (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-500">
       <Loader className="w-12 h-12 animate-spin text-indigo-600 mb-4" />
-      <p className="text-lg font-medium text-slate-700">
-        正在載入戰情資料庫...
-      </p>
-      <p className="text-sm opacity-70">
-        使用者 ID: {String(userId || '驗證中...')}
-      </p>
+      <p className="text-lg font-medium text-slate-700">正在載入戰情資料庫...</p>
+      <p className="text-sm opacity-70">使用者 ID: {String(userId || '驗證中...')}</p>
     </div>
   );
 
@@ -1500,16 +1526,10 @@ const App = () => {
           rows="4"
         />
         <div className="flex justify-end space-x-2">
-          <button
-            onClick={onCancel}
-            className={`${styles.btnSecondary} text-sm`}
-          >
+          <button onClick={onCancel} className={`${styles.btnSecondary} text-sm`}>
             取消
           </button>
-          <button
-            onClick={handleSave}
-            className={`${styles.btnPrimary} text-sm`}
-          >
+          <button onClick={handleSave} className={`${styles.btnPrimary} text-sm`}>
             <Save className="w-4 h-4 mr-1" /> 儲存
           </button>
         </div>
@@ -1536,6 +1556,11 @@ const App = () => {
     const academicSubgroups = units.filter(
       (u) => u.category === 'Academic' && u.subgroup === '獨立空間'
     ).length;
+
+    // Detect incomplete units
+    const incompleteUnits = useMemo(() => {
+      return units.filter(u => !checkUnitCompleteness(u));
+    }, [units]);
 
     const [isFilterCollapsed, setIsFilterCollapsed] = useState(true);
     const [filter, setFilter] = useState({
@@ -1582,58 +1607,58 @@ const App = () => {
     });
 
     const handleMapClick = (e) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-      if (!mapState.isDrawing) {
-        setMapState((p) => ({
-          ...p,
-          isDrawing: true,
-          start: { x, y },
-          current: { x, y },
-        }));
-      } else {
-        const { start, areaCodeInput } = mapState;
-        if (!areaCodeInput) {
-          alert('請輸入區域代表編號。');
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+  
+        if (!mapState.isDrawing) {
+          setMapState((p) => ({
+            ...p,
+            isDrawing: true,
+            start: { x, y },
+            current: { x, y },
+          }));
+        } else {
+          const { start, areaCodeInput } = mapState;
+          if (!areaCodeInput) {
+            alert('請輸入區域代表編號。');
+            setMapState((p) => ({
+              ...p,
+              isDrawing: false,
+              start: null,
+              current: null,
+            }));
+            return;
+          }
+  
+          const newArea = {
+            id: crypto.randomUUID(),
+            code: areaCodeInput,
+            x1: Math.min(start.x, x),
+            y1: Math.min(start.y, y),
+            x2: Math.max(start.x, x),
+            y2: Math.max(start.y, y),
+            unitCount: 0,
+          };
+  
+          updatePrivateData({ areaMap: [...areaMap, newArea] });
           setMapState((p) => ({
             ...p,
             isDrawing: false,
             start: null,
             current: null,
+            areaCodeInput: '',
           }));
-          return;
         }
-
-        const newArea = {
-          id: crypto.randomUUID(),
-          code: areaCodeInput,
-          x1: Math.min(start.x, x),
-          y1: Math.min(start.y, y),
-          x2: Math.max(start.x, x),
-          y2: Math.max(start.y, y),
-          unitCount: 0,
-        };
-
-        updatePrivateData({ areaMap: [...areaMap, newArea] });
-        setMapState((p) => ({
-          ...p,
-          isDrawing: false,
-          start: null,
-          current: null,
-          areaCodeInput: '',
-        }));
-      }
-    };
+      };
 
     const handleMouseMove = (e) => {
-      if (!mapState.isDrawing) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      setMapState((p) => ({ ...p, current: { x, y } }));
-    };
+        if (!mapState.isDrawing) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        setMapState((p) => ({ ...p, current: { x, y } }));
+      };
 
     // --- FIX: Image Upload with Compression ---
     const handleMapFileUpload = async (event) => {
@@ -1644,16 +1669,13 @@ const App = () => {
       try {
         // Compress image first to avoid Firestore 1MB limit
         const compressedBase64 = await compressImage(file);
-
+        
         // Save to Firestore (Anonymous auth works here if Rules allow)
         await updatePrivateData({ uploadedMapUrl: compressedBase64 });
         setGlobalMessage({ text: '地圖上傳成功！(已壓縮)', type: 'success' });
       } catch (error) {
-        console.error('Upload failed', error);
-        setGlobalMessage({
-          text: '圖片處理失敗，請試著使用較小的圖片。',
-          type: 'error',
-        });
+        console.error("Upload failed", error);
+        setGlobalMessage({ text: '圖片處理失敗，請試著使用較小的圖片。', type: 'error' });
       } finally {
         setIsUploading(false);
         setMapState((p) => ({ ...p, uploadedFile: null }));
@@ -1669,6 +1691,91 @@ const App = () => {
         deleteUnits(selectedUnitIds);
         setSelectedUnitIds([]);
       }
+    };
+
+    const handleImport = async (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      if (typeof window.XLSX === 'undefined') {
+        alert('Excel 工具尚未載入，請稍候再試');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = window.XLSX.read(data, {type: 'array'});
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const json = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          // Basic check
+          if(json.length < 2) {
+            alert('檔案無資料');
+            return;
+          }
+
+          // Headers mapping (Assuming order or exact name match, let's use name match)
+          const headers = json[0];
+          const nameIndex = headers.findIndex(h => h && h.includes('單位名稱'));
+          const categoryIndex = headers.findIndex(h => h && h.includes('單位類別'));
+          const subgroupIndex = headers.findIndex(h => h && h.includes('獨立空間'));
+          const buildingIndex = headers.findIndex(h => h && h.includes('棟別'));
+          const statusIndex = headers.findIndex(h => h && h.includes('進攻狀態'));
+          const contactIndex = headers.findIndex(h => h && h.includes('承辦'));
+          const phoneIndex = headers.findIndex(h => h && h.includes('電話'));
+          const areaIndex = headers.findIndex(h => h && h.includes('區域'));
+
+          if (nameIndex === -1 || buildingIndex === -1) {
+            alert('錯誤：無法找到「單位名稱」或「棟別代號」欄位，請使用標準範例檔。');
+            return;
+          }
+
+          const batch = [];
+          
+          for(let i=1; i<json.length; i++) {
+            const row = json[i];
+            if(!row || row.length === 0) continue;
+            
+            const rawCategory = row[categoryIndex] || '學術';
+            const category = rawCategory.includes('行政') ? 'Administrative' : 'Academic';
+            
+            const rawStatus = row[statusIndex] || '進攻中';
+            let attackStatus = 'engaged';
+            if (rawStatus.includes('本牌')) attackStatus = 'client';
+            else if (rawStatus.includes('結案')) attackStatus = 'settled_non_client';
+
+            const newUnit = {
+              name: row[nameIndex] || '',
+              category,
+              subgroup: row[subgroupIndex] || '',
+              buildingId: row[buildingIndex] || '',
+              attackStatus,
+              contactName: row[contactIndex] || '',
+              contactPhone: row[phoneIndex] || '',
+              areaCode: row[areaIndex] || '',
+              equipment: '[]',
+              history: '[]',
+              characteristics: [],
+              createdAt: new Date().toISOString()
+            };
+            
+            // Only add if name exists
+            if(newUnit.name) {
+               batch.push(addDoc(getUnitCollectionRef(db), newUnit));
+            }
+          }
+
+          await Promise.all(batch);
+          setGlobalMessage({ text: `成功匯入 ${batch.length} 筆資料`, type: 'success' });
+
+        } catch (err) {
+          console.error(err);
+          alert('匯入失敗: ' + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
     };
 
     const exportUnits = () => {
@@ -1690,11 +1797,48 @@ const App = () => {
 
     return (
       <div className="space-y-8 p-6 max-w-7xl mx-auto">
-        <div className="flex items-center space-x-3 mb-6">
-          <MapPin className="w-8 h-8 text-indigo-600" />
-          <h2 className="text-3xl font-extrabold text-slate-800">
-            戰情地圖與對象總覽
-          </h2>
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-3">
+            <MapPin className="w-8 h-8 text-indigo-600" />
+            <h2 className="text-3xl font-extrabold text-slate-800">戰情地圖與對象總覽</h2>
+          </div>
+          
+          {incompleteUnits.length > 0 && (
+            <div className="relative group z-20">
+              <button className="flex items-center space-x-2 bg-rose-100 text-rose-700 px-4 py-2 rounded-lg font-bold animate-pulse hover:animate-none hover:bg-rose-200 transition">
+                <AlertCircle className="w-5 h-5" />
+                <span>{incompleteUnits.length} 筆資料待補齊</span>
+                <ChevronsDown className="w-4 h-4" />
+              </button>
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-rose-100 hidden group-hover:block overflow-hidden">
+                <div className="bg-rose-50 p-3 text-xs font-bold text-rose-800 border-b border-rose-100">
+                  異常單位清單 (點擊編輯)
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {incompleteUnits.map(u => (
+                    <button 
+                      key={u.id}
+                      onClick={() => {
+                        setEditingUnitId(u.id);
+                        setCurrentTab('record');
+                        setIsNewUnit(false);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-rose-50 text-slate-700 border-b border-gray-50 last:border-0"
+                    >
+                      {u.name || '(未命名)'}
+                      <span className="text-xs text-rose-400 block">缺: {
+                        !u.name ? '名稱 ' : ''
+                      }{
+                        !u.buildingId ? '棟別 ' : ''
+                      }{
+                        !u.contactName ? '聯絡人 ' : ''
+                      }</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 狀態卡 */}
@@ -1731,18 +1875,24 @@ const App = () => {
             <p className="font-bold text-xl text-orange-600 mb-2">行政單位</p>
             <div className="flex justify-between items-center text-slate-700 px-4">
               <span>總數: {adminUnits}</span>
-              <span className="font-bold bg-orange-200 px-2 py-1 rounded-md text-orange-800">
-                獨立空間: {adminSubgroups}
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="font-bold bg-orange-200 px-2 py-1 rounded-md text-orange-800">
+                  獨立空間: {adminSubgroups}
+                </span>
+                <span className="text-[10px] text-orange-600/70 mt-1">(大單位底下獨立空間)</span>
+              </div>
             </div>
           </div>
           <div className="text-center w-full md:w-1/3 p-4 bg-sky-50 rounded-xl border border-sky-100">
             <p className="font-bold text-xl text-sky-600 mb-2">學術單位</p>
             <div className="flex justify-between items-center text-slate-700 px-4">
               <span>總數: {academicUnits}</span>
-              <span className="font-bold bg-sky-200 px-2 py-1 rounded-md text-sky-800">
-                獨立空間: {academicSubgroups}
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="font-bold bg-sky-200 px-2 py-1 rounded-md text-sky-800">
+                  獨立空間: {academicSubgroups}
+                </span>
+                <span className="text-[10px] text-sky-600/70 mt-1">(大單位底下獨立空間)</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1754,8 +1904,8 @@ const App = () => {
               <MapPin className="w-5 h-5 mr-2" /> 校園地圖戰情室
             </h3>
             <div className="flex space-x-2 items-center">
-              {/* Controls */}
-              <input
+               {/* Controls */}
+               <input
                 type="text"
                 value={mapState.areaCodeInput}
                 onChange={(e) =>
@@ -1765,7 +1915,7 @@ const App = () => {
                   }))
                 }
                 className={`${styles.formInput} w-24 bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:ring-slate-500`}
-                placeholder="區域編號"
+                placeholder="輸入區號"
                 disabled={mapState.isDrawing}
               />
               <button
@@ -1788,13 +1938,7 @@ const App = () => {
               </button>
 
               {/* Upload Button */}
-              <label
-                className={`${
-                  styles.btnPrimary
-                } cursor-pointer flex items-center bg-indigo-600 hover:bg-indigo-700 ${
-                  isUploading ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
+              <label className={`${styles.btnPrimary} cursor-pointer flex items-center bg-indigo-600 hover:bg-indigo-700 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                 <input
                   type="file"
                   accept="image/*"
@@ -1803,9 +1947,9 @@ const App = () => {
                   disabled={isUploading}
                 />
                 {isUploading ? (
-                  <Loader className="w-4 h-4 mr-1 animate-spin" />
+                    <Loader className="w-4 h-4 mr-1 animate-spin" />
                 ) : (
-                  <UploadCloud className="w-4 h-4 mr-1" />
+                    <UploadCloud className="w-4 h-4 mr-1" /> 
                 )}
                 {isUploading ? '處理中...' : '上傳地圖'}
               </label>
@@ -1821,51 +1965,50 @@ const App = () => {
             onMouseMove={handleMouseMove}
           >
             {uploadedMapUrl ? (
-              <div
+                <div
                 className="w-full h-full transition-transform duration-500 ease-out"
                 style={{
-                  backgroundImage: `url(${uploadedMapUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
+                    backgroundImage: `url(${uploadedMapUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                 }}
-              ></div>
+                ></div>
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-slate-400">
-                <p>請上傳地圖圖片</p>
-              </div>
+                <div className="w-full h-full flex items-center justify-center text-slate-400">
+                    <p>請上傳地圖圖片</p>
+                </div>
             )}
 
             {/* Existing Areas Overlays */}
             {areaMap.map((area) => (
-              <div
-                key={area.id}
-                className="absolute border-2 border-rose-500 bg-rose-500/20 hover:bg-rose-500/40 transition-all duration-200 group/area shadow-lg"
-                style={{
-                  left: `${Math.min(area.x1, area.x2)}%`,
-                  top: `${Math.min(area.y1, area.y2)}%`,
-                  width: `${Math.abs(area.x2 - area.x1)}%`,
-                  height: `${Math.abs(area.y2 - area.y1)}%`,
-                }}
-              >
-                <span className="absolute -top-6 left-0 bg-rose-600 text-white text-xs px-2 py-0.5 rounded shadow-sm font-bold whitespace-nowrap z-10">
-                  {area.code} (
-                  {units.filter((u) => u.areaCode === area.code).length})
-                </span>
-                <button
-                  className="absolute -top-2 -right-2 p-1 bg-white text-rose-600 rounded-full shadow-md opacity-0 group-hover/area:opacity-100 transition transform hover:scale-110 z-20"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    updatePrivateData({
-                      areaMap: areaMap.filter((a) => a.id !== area.id),
-                    });
-                  }}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
+               <div
+                 key={area.id}
+                 className="absolute border-2 border-rose-500 bg-rose-500/20 hover:bg-rose-500/40 transition-all duration-200 group/area shadow-lg"
+                 style={{
+                   left: `${Math.min(area.x1, area.x2)}%`,
+                   top: `${Math.min(area.y1, area.y2)}%`,
+                   width: `${Math.abs(area.x2 - area.x1)}%`,
+                   height: `${Math.abs(area.y2 - area.y1)}%`,
+                 }}
+               >
+                 <span className="absolute -top-6 left-0 bg-rose-600 text-white text-xs px-2 py-0.5 rounded shadow-sm font-bold whitespace-nowrap z-10">
+                   {area.code} ({units.filter(u => u.areaCode === area.code).length})
+                 </span>
+                 <button
+                    className="absolute -top-2 -right-2 p-1 bg-white text-rose-600 rounded-full shadow-md opacity-0 group-hover/area:opacity-100 transition transform hover:scale-110 z-20"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updatePrivateData({
+                        areaMap: areaMap.filter((a) => a.id !== area.id),
+                      });
+                    }}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+               </div>
             ))}
-            {/* Drawing Box */}
-            {mapState.isDrawing && mapState.start && mapState.current && (
+             {/* Drawing Box */}
+             {mapState.isDrawing && mapState.start && mapState.current && (
               <div
                 className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400/30"
                 style={{
@@ -1973,21 +2116,32 @@ const App = () => {
           </div>
 
           <div className="p-4">
-            <div className="flex justify-end space-x-2 mb-4">
-              <button
-                onClick={deleteSelectedUnits}
-                disabled={selectedUnitIds.length === 0}
-                className={`${styles.btnDanger} py-1.5 text-sm`}
-              >
-                <Trash2 className="w-4 h-4 mr-1" /> 刪除 (
-                {selectedUnitIds.length})
-              </button>
-              <button
-                onClick={exportUnits}
-                className={`${styles.btnInfo} py-1.5 text-sm`}
-              >
-                <Download className="w-4 h-4 mr-1" /> 匯出
-              </button>
+            <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+              <div className="flex space-x-2">
+                 <button onClick={downloadImportTemplate} className={`${styles.btnSecondary} py-1.5 text-sm`}>
+                    <Download className="w-4 h-4 mr-1"/> 下載匯入範例
+                 </button>
+                 <label className={`${styles.btnPrimary} py-1.5 text-sm cursor-pointer`}>
+                    <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImport} />
+                    <FileUp className="w-4 h-4 mr-1"/> 匯入資料
+                 </label>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={deleteSelectedUnits}
+                  disabled={selectedUnitIds.length === 0}
+                  className={`${styles.btnDanger} py-1.5 text-sm`}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" /> 刪除 (
+                  {selectedUnitIds.length})
+                </button>
+                <button
+                  onClick={exportUnits}
+                  className={`${styles.btnInfo} py-1.5 text-sm`}
+                >
+                  <Download className="w-4 h-4 mr-1" /> 匯出
+                </button>
+              </div>
             </div>
 
             <UnitTable
@@ -2019,11 +2173,7 @@ const App = () => {
   const FilterSelect = ({ label, value, onChange, children }) => (
     <div className="flex flex-col">
       <label className="text-xs font-bold text-slate-500 mb-1">{label}</label>
-      <select
-        value={value}
-        onChange={onChange}
-        className={`${styles.formSelect} text-sm`}
-      >
+      <select value={value} onChange={onChange} className={`${styles.formSelect} text-sm`}>
         {children}
       </select>
     </div>
@@ -2092,6 +2242,9 @@ const App = () => {
                 </td>
                 <td className="p-3 text-sm font-medium text-gray-900">
                   {unit.name}
+                  {!checkUnitCompleteness(unit) && (
+                    <AlertCircle className="w-4 h-4 text-rose-500 inline ml-1" />
+                  )}
                 </td>
                 <td className="p-3 text-sm text-gray-600">
                   {unit.contactName}
@@ -2193,7 +2346,8 @@ const App = () => {
     }
     const dataToSave = {
       ...newUnitData,
-      subgroup: newUnitData.category === 'Academic' ? newUnitData.subgroup : '',
+      subgroup:
+        newUnitData.category === 'Academic' ? newUnitData.subgroup : '',
     };
 
     if (isNewUnit) {
@@ -2999,7 +3153,10 @@ const App = () => {
               className={`${styles.formInput} w-24`}
               placeholder="代號"
             />
-            <button onClick={handleAddBuilding} className={styles.btnPrimary}>
+            <button
+              onClick={handleAddBuilding}
+              className={styles.btnPrimary}
+            >
               <Plus className="w-4 h-4 mr-1" /> 新增
             </button>
           </div>
@@ -3099,18 +3256,12 @@ const App = () => {
 
   const renderTabContent = () => {
     switch (currentTab) {
-      case 'calendar':
-        return <Tab1Calendar />;
-      case 'guidelines':
-        return <Tab2Guidelines />;
-      case 'targets':
-        return <Tab3TargetsMap />;
-      case 'record':
-        return <Tab4Record />;
-      case 'settings':
-        return <Tab5Settings />;
-      default:
-        return <Tab3TargetsMap />;
+      case 'calendar': return <Tab1Calendar />;
+      case 'guidelines': return <Tab2Guidelines />;
+      case 'targets': return <Tab3TargetsMap />;
+      case 'record': return <Tab4Record />;
+      case 'settings': return <Tab5Settings />;
+      default: return <Tab3TargetsMap />;
     }
   };
 
@@ -3118,11 +3269,7 @@ const App = () => {
     { id: 'targets', label: '戰情地圖', icon: <MapPin className="w-4 h-4" /> },
     { id: 'calendar', label: '行事曆', icon: <Activity className="w-4 h-4" /> },
     { id: 'record', label: '拜訪紀錄', icon: <Edit className="w-4 h-4" /> },
-    {
-      id: 'guidelines',
-      label: '攻擊準則',
-      icon: <Target className="w-4 h-4" />,
-    },
+    { id: 'guidelines', label: '攻擊準則', icon: <Target className="w-4 h-4" /> },
     { id: 'settings', label: '設定', icon: <Building className="w-4 h-4" /> },
   ];
 
@@ -3132,60 +3279,33 @@ const App = () => {
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-white/80 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <div className="bg-indigo-600 text-white p-2 rounded-lg">
-                <Activity className="w-6 h-6" />
-              </div>
-              <h1 className="text-xl font-bold text-slate-800">
-                2026 台大攻略戰情室
-              </h1>
+            <div className="flex justify-between items-center h-16">
+                 <div className="flex items-center space-x-2">
+                     <div className="bg-indigo-600 text-white p-2 rounded-lg"><Activity className="w-6 h-6"/></div>
+                     <h1 className="text-xl font-bold text-slate-800">2026 台大攻略戰情室</h1>
+                 </div>
+                 <div className="text-xs text-slate-500 font-mono">ID: {userId ? String(userId).substring(0, 8) + '...' : 'Guest'}</div>
             </div>
-            <div className="text-xs text-slate-500 font-mono">
-              ID: {userId ? String(userId).substring(0, 8) + '...' : 'Guest'}
-            </div>
-          </div>
-          <nav className="flex space-x-1 overflow-x-auto pb-1 no-scrollbar">
+            <nav className="flex space-x-1 overflow-x-auto pb-1 no-scrollbar">
             {navItems.map((item) => (
-              <button
+                <button
                 key={item.id}
                 onClick={() => setCurrentTab(item.id)}
-                className={`relative px-5 py-3 text-sm font-medium transition-all duration-300 rounded-t-lg flex items-center space-x-2 whitespace-nowrap ${
-                  currentTab === item.id
-                    ? 'text-indigo-600 bg-indigo-50/50'
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                }`}
-              >
+                className={`relative px-5 py-3 text-sm font-medium transition-all duration-300 rounded-t-lg flex items-center space-x-2 whitespace-nowrap ${currentTab === item.id ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
                 {item.icon}
                 <span>{item.label}</span>
-                {currentTab === item.id && (
-                  <span className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full" />
-                )}
-              </button>
+                {currentTab === item.id && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full" />}
+                </button>
             ))}
-          </nav>
+            </nav>
         </div>
       </header>
       {globalMessage.text && (
-        <div
-          className={`fixed top-24 right-6 p-4 rounded-xl shadow-2xl z-50 flex items-center space-x-3 transform transition-all duration-500 ${
-            globalMessage.type === 'success'
-              ? 'bg-emerald-600 text-white'
-              : 'bg-rose-600 text-white'
-          }`}
-        >
-          {globalMessage.type === 'success' ? (
-            <CheckCircle className="w-5 h-5" />
-          ) : (
-            <AlertTriangle className="w-5 h-5" />
-          )}
-          <span>{globalMessage.text}</span>
-          <button
-            onClick={() => setGlobalMessage({ text: '', type: '' })}
-            className="ml-2 hover:bg-white/20 rounded-full p-1"
-          >
-            <X className="w-4 h-4" />
-          </button>
+        <div className={`fixed top-24 right-6 p-4 rounded-xl shadow-2xl z-50 flex items-center space-x-3 transform transition-all duration-500 ${globalMessage.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+            {globalMessage.type === 'success' ? <CheckCircle className="w-5 h-5"/> : <AlertTriangle className="w-5 h-5"/>}
+            <span>{globalMessage.text}</span>
+            <button onClick={() => setGlobalMessage({ text: '', type: '' })} className="ml-2 hover:bg-white/20 rounded-full p-1"><X className="w-4 h-4" /></button>
         </div>
       )}
       <main className="py-6">{renderTabContent()}</main>
