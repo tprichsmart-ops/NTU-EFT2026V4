@@ -46,7 +46,8 @@ import {
   ZoomIn,
   ZoomOut,
   Undo,
-  Check
+  Check,
+  Camera
 } from 'lucide-react';
 
 // --- Global Firebase Configuration and Utility Functions ---
@@ -309,6 +310,7 @@ const App = () => {
   const [userId, setUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
+  const [isDownloadingMap, setIsDownloadingMap] = useState(false);
 
   const [appData, setAppData] = useState({
     units: [],
@@ -1700,6 +1702,91 @@ const App = () => {
         // Optional: Implement rubber-banding line to mouse cursor
     };
 
+    // --- DOWNLOAD MAP FUNCTION ---
+    const handleDownloadMap = async () => {
+        if (!uploadedMapUrl) return;
+        
+        setIsDownloadingMap(true); // Reusing isUploading as generic loading state for this action
+        try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.crossOrigin = "anonymous"; // Try to request CORS permission
+            img.src = uploadedMapUrl;
+            
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+            });
+
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // Draw Map
+            ctx.drawImage(img, 0, 0);
+
+            // Draw Areas
+            areaMap.forEach(area => {
+                if (area.type === 'polygon' && area.points && area.points.length > 0) {
+                    ctx.beginPath();
+                    const startX = (area.points[0].x / 100) * canvas.width;
+                    const startY = (area.points[0].y / 100) * canvas.height;
+                    ctx.moveTo(startX, startY);
+                    
+                    area.points.forEach((p, i) => {
+                        if (i > 0) {
+                            ctx.lineTo((p.x / 100) * canvas.width, (p.y / 100) * canvas.height);
+                        }
+                    });
+                    ctx.closePath();
+                    
+                    // Style matches the UI
+                    ctx.fillStyle = "rgba(239, 68, 68, 0.4)"; // red-500/40
+                    ctx.fill();
+                    ctx.lineWidth = Math.max(2, canvas.width * 0.005); // Dynamic line width
+                    ctx.strokeStyle = "red";
+                    ctx.stroke();
+
+                    // Draw Label
+                    // Calculate centroid
+                    const centerX = (area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length / 100) * canvas.width;
+                    const centerY = (area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length / 100) * canvas.height;
+                    
+                    // Label box
+                    const fontSize = Math.max(12, canvas.width * 0.015);
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    const text = area.code;
+                    const textMetrics = ctx.measureText(text);
+                    const padding = fontSize * 0.5;
+                    const boxWidth = textMetrics.width + padding * 2;
+                    const boxHeight = fontSize + padding;
+
+                    ctx.fillStyle = "#dc2626"; // red-600
+                    // Draw rounded rect background (simplified as rect)
+                    ctx.fillRect(centerX - boxWidth/2, centerY - boxHeight/2, boxWidth, boxHeight);
+                    
+                    ctx.fillStyle = "white";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(text, centerX, centerY);
+                }
+            });
+
+            const dataUrl = canvas.toDataURL("image/png");
+            const link = document.createElement('a');
+            link.download = `ntu-map-strategy-${new Date().toISOString().slice(0,10)}.png`;
+            link.href = dataUrl;
+            link.click();
+            
+        } catch (e) {
+            console.error("Download failed", e);
+            alert("下載失敗：可能是因為跨網域圖片權限問題 (CORS)。請嘗試使用本地上傳的圖片，或是確認雲端硬碟連結權限。");
+        } finally {
+            setIsDownloadingMap(false);
+        }
+    }
+
+
     const deleteSelectedUnits = () => {
       if (
         window.confirm(
@@ -1968,6 +2055,7 @@ const App = () => {
 
                {/* Controls */}
               {!mapState.isDrawing && !mapState.isNaming ? (
+                  <>
                   <button
                     onClick={() =>
                       setMapState((p) => ({
@@ -1980,6 +2068,15 @@ const App = () => {
                   >
                     <Edit className="w-4 h-4 mr-2"/> 開始圈選
                   </button>
+                  <button
+                    onClick={handleDownloadMap}
+                    className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent bg-sky-600 hover:bg-sky-500 text-white`}
+                    disabled={!uploadedMapUrl || isDownloadingMap}
+                  >
+                     {isDownloadingMap ? <Loader className="w-4 h-4 mr-2 animate-spin"/> : <Camera className="w-4 h-4 mr-2"/>}
+                     下載地圖
+                  </button>
+                  </>
               ) : !mapState.isNaming ? (
                   <>
                     <button
@@ -2027,6 +2124,7 @@ const App = () => {
                         src={uploadedMapUrl} 
                         alt="Campus Map" 
                         referrerPolicy="no-referrer"
+                        crossOrigin="anonymous" 
                         className="block max-w-none" 
                         style={{ height: 'auto' }} // Let image define natural size
                         onDragStart={(e) => e.preventDefault()}
