@@ -47,7 +47,11 @@ import {
   ZoomOut,
   Undo,
   Check,
-  Camera
+  Camera,
+  Printer,
+  User,
+  Phone,
+  History
 } from 'lucide-react';
 
 // --- Global Firebase Configuration and Utility Functions ---
@@ -98,44 +102,43 @@ const downloadImportTemplate = () => {
     return;
   }
   
-  // UPDATED: Headers to match new requirements
+  // Headers to match new requirements
   const headers = [
     '單位名稱 (必填)',
     '棟別代號 (必填)',
     '樓層',
     '科室別(房號)',
-    '承辦姓名',
-    '電話',
+    '承辦姓名1(主)', '電話1(主)',
+    '承辦姓名2', '電話2',
+    '承辦姓名3', '電話3',
     '獨立空間分組 (請填: 獨立空間/一般)',
     '進攻狀態 (請填: 進攻中/已進攻暫定結案/本牌客戶)',
     '單位類別 (請填: 行政/學術)'
   ];
 
   const sampleData = [
-    ['範例系辦', 'B2', '3F', '302室', '王小明', '02-33661234', '獨立空間', '進攻中', '學術'],
-    ['範例處室', 'A1', '1F', '註冊組', '李大同', '02-33665678', '一般', '本牌客戶', '行政']
+    ['範例系辦', 'B2', '3F', '302室', '王小明', '02-33661234', '陳小華', '0912345678', '', '', '獨立空間', '進攻中', '學術'],
+    ['範例處室', 'A1', '1F', '註冊組', '李大同', '02-33665678', '', '', '', '', '一般', '本牌客戶', '行政']
   ];
 
   const ws = window.XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
   
   ws['!cols'] = [
     { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, 
-    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 10 }
+    { wch: 15 }, { wch: 15 },
+    { wch: 15 }, { wch: 15 },
+    { wch: 15 }, { wch: 15 },
+    { wch: 20 }, { wch: 20 }, { wch: 10 }
   ];
 
-  // Data Validation ranges need to be adjusted for new column positions
-  // Column G (Index 6): 獨立空間分組
-  // Column H (Index 7): 進攻狀態
-  // Column I (Index 8): 單位類別
-
-  const range = { s: { r: 1, c: 0 }, e: { r: 100, c: 8 } };
+  const range = { s: { r: 1, c: 0 }, e: { r: 100, c: 12 } };
   
   if (!ws['!dataValidation']) ws['!dataValidation'] = [];
 
-  // Group Validation
+  // Group Validation (Column K -> Index 10)
   for (let r = range.s.r; r <= range.e.r; ++r) {
     ws['!dataValidation'].push({
-      sqref: window.XLSX.utils.encode_cell({r: r, c: 6}),
+      sqref: window.XLSX.utils.encode_cell({r: r, c: 10}),
       type: 'list',
       operator: 'equal',
       formula1: '"獨立空間,一般"',
@@ -145,10 +148,10 @@ const downloadImportTemplate = () => {
     });
   }
 
-  // Status Validation
+  // Status Validation (Column L -> Index 11)
   for (let r = range.s.r; r <= range.e.r; ++r) {
     ws['!dataValidation'].push({
-      sqref: window.XLSX.utils.encode_cell({r: r, c: 7}),
+      sqref: window.XLSX.utils.encode_cell({r: r, c: 11}),
       type: 'list',
       operator: 'equal',
       formula1: '"進攻中,已進攻暫定結案,本牌客戶"',
@@ -158,10 +161,10 @@ const downloadImportTemplate = () => {
     });
   }
 
-  // Category Validation
+  // Category Validation (Column M -> Index 12)
   for (let r = range.s.r; r <= range.e.r; ++r) {
     ws['!dataValidation'].push({
-      sqref: window.XLSX.utils.encode_cell({r: r, c: 8}),
+      sqref: window.XLSX.utils.encode_cell({r: r, c: 12}),
       type: 'list',
       operator: 'equal',
       formula1: '"行政,學術"', 
@@ -187,6 +190,50 @@ const styles = {
   btnInfo: "px-4 py-2 bg-sky-50 text-sky-600 border border-sky-200 rounded-lg hover:bg-sky-100 transition flex items-center justify-center font-medium",
   checkbox: "w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
 };
+
+// --- Reusable UI Components (Defined outside App to prevent ReferenceError) ---
+
+const StatusCard = ({ title, value, icon, gradient }) => (
+  <div
+    className={`relative p-6 rounded-2xl shadow-lg text-white bg-gradient-to-br ${gradient} overflow-hidden transform hover:-translate-y-1 transition duration-300`}
+  >
+    <div className="absolute top-0 right-0 p-4 opacity-20 transform scale-150">
+      {icon}
+    </div>
+    <p className="text-sm font-medium opacity-90 tracking-wide">{title}</p>
+    <p className="text-4xl font-extrabold mt-2 tracking-tight">{value}</p>
+  </div>
+);
+
+const InputGroup = ({ label, children }) => (
+  <div className="flex flex-col space-y-1.5">
+    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+      {label}
+    </label>
+    {children}
+  </div>
+);
+
+const FilterInput = ({ label, value, onChange }) => (
+  <div className="flex flex-col">
+    <label className="text-xs font-bold text-slate-500 mb-1">{label}</label>
+    <input
+      type="text"
+      value={value}
+      onChange={onChange}
+      className={`${styles.formInput} text-sm`}
+    />
+  </div>
+);
+
+const FilterSelect = ({ label, value, onChange, children }) => (
+  <div className="flex flex-col">
+    <label className="text-xs font-bold text-slate-500 mb-1">{label}</label>
+    <select value={value} onChange={onChange} className={`${styles.formSelect} text-sm`}>
+      {children}
+    </select>
+  </div>
+);
 
 // --- Initial Data Structures for Defaults ---
 
@@ -225,7 +272,6 @@ const initialSettings = {
     },
   ],
   areaMap: [],
-  // UPDATED: New Map URL as requested
   uploadedMapUrl: 'https://drive.google.com/thumbnail?id=1fmrcmaTr3qSeccln8If59g_eoPnDDY4J&sz=w3000',
 };
 
@@ -304,6 +350,7 @@ const useExcelExport = () => {
 // --- App Initialization and State Management ---
 
 const App = () => {
+  // --- STATE HOISTING: All State Hooks Defined at Top Level ---
   const [currentTab, setCurrentTab] = useState('targets');
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
@@ -311,12 +358,19 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
 
+  // Data State
   const [appData, setAppData] = useState({
     units: [],
     settings: initialSettings,
     schedules: [],
     meetings: [],
   });
+
+  // Unit Editing State (Moved to top level to fix ReferenceError)
+  const [editingUnitId, setEditingUnitId] = useState(null);
+  const [isNewUnit, setIsNewUnit] = useState(false);
+  const [newUnitData, setNewUnitData] = useState({});
+  const [recordFilter, setRecordFilter] = useState({ type: '', area: '' });
 
   const exportToExcel = useExcelExport();
 
@@ -349,7 +403,6 @@ const App = () => {
         return;
       }
 
-      // FIX: Check if app is already initialized to prevent "duplicate app" errors
       const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const database = getFirestore(app);
       const authentication = getAuth(app);
@@ -420,7 +473,6 @@ const App = () => {
             settings: {
               ...initialSettings,
               ...data,
-              // Force overwrite uploadedMapUrl with hardcoded one to prevent loss
               uploadedMapUrl: initialSettings.uploadedMapUrl, 
               guidelines: data.guidelines || initialSettings.guidelines,
               talkScripts: data.talkScripts || initialSettings.talkScripts,
@@ -1615,8 +1667,8 @@ const App = () => {
           (filter.type === '' || unit.category === filter.type) &&
           (filter.name === '' || unit.name.includes(filter.name)) &&
           (filter.contact === '' ||
-            unit.contactName.includes(filter.contact)) &&
-          (filter.phone === '' || unit.contactPhone.includes(filter.phone)) &&
+            (unit.contactName1 && unit.contactName1.includes(filter.contact))) && // Filter only primary contact for simplicity in overview
+          (filter.phone === '' || (unit.contactPhone1 && unit.contactPhone1.includes(filter.phone))) &&
           hasMatchingEquipment
         );
       });
@@ -1667,13 +1719,19 @@ const App = () => {
           const buildingIndex = headers.findIndex(h => h && h.includes('棟別'));
           const floorIndex = headers.findIndex(h => h && h.includes('樓層'));
           const roomIndex = headers.findIndex(h => h && h.includes('房號') || h.includes('科室'));
-          const contactIndex = headers.findIndex(h => h && h.includes('承辦'));
-          const phoneIndex = headers.findIndex(h => h && h.includes('電話'));
+          
+          // Contact Mapping
+          const contactName1Index = headers.findIndex(h => h && h.includes('承辦姓名1') || h.includes('承辦姓名')); // Fallback for old templates
+          const contactPhone1Index = headers.findIndex(h => h && h.includes('電話1') || h.includes('電話'));
+          const contactName2Index = headers.findIndex(h => h && h.includes('承辦姓名2'));
+          const contactPhone2Index = headers.findIndex(h => h && h.includes('電話2'));
+          const contactName3Index = headers.findIndex(h => h && h.includes('承辦姓名3'));
+          const contactPhone3Index = headers.findIndex(h => h && h.includes('電話3'));
+
           const subgroupIndex = headers.findIndex(h => h && h.includes('獨立空間'));
           const statusIndex = headers.findIndex(h => h && h.includes('進攻狀態'));
           const categoryIndex = headers.findIndex(h => h && h.includes('單位類別'));
           
-          // Area code might be optional or auto-determined, keeping it generic if exists
           const areaIndex = headers.findIndex(h => h && h.includes('區域'));
 
           if (nameIndex === -1 || buildingIndex === -1) {
@@ -1700,8 +1758,15 @@ const App = () => {
               buildingId: row[buildingIndex] || '',
               floor: row[floorIndex] || '',
               roomNumber: row[roomIndex] || '',
-              contactName: row[contactIndex] || '',
-              contactPhone: row[phoneIndex] || '',
+              
+              // Contacts
+              contactName1: row[contactName1Index] || '',
+              contactPhone1: row[contactPhone1Index] || '',
+              contactName2: row[contactName2Index] || '',
+              contactPhone2: row[contactPhone2Index] || '',
+              contactName3: row[contactName3Index] || '',
+              contactPhone3: row[contactPhone3Index] || '',
+
               subgroup: row[subgroupIndex] || '',
               attackStatus,
               category,
@@ -1735,8 +1800,12 @@ const App = () => {
         { key: 'buildingId', label: '棟別', width: 10 },
         { key: 'floor', label: '樓層', width: 10 },
         { key: 'roomNumber', label: '房號/科室', width: 15 },
-        { key: 'contactName', label: '聯絡人', width: 15 },
-        { key: 'contactPhone', label: '電話', width: 15 },
+        { key: 'contactName1', label: '承辦1(主)', width: 15 },
+        { key: 'contactPhone1', label: '電話1', width: 15 },
+        { key: 'contactName2', label: '承辦2', width: 15 },
+        { key: 'contactPhone2', label: '電話2', width: 15 },
+        { key: 'contactName3', label: '承辦3', width: 15 },
+        { key: 'contactPhone3', label: '電話3', width: 15 },
         { key: 'subgroup', label: '分組', width: 10 },
         { key: 'attackStatus', label: '進攻狀態', width: 15 },
         { key: 'equipment', label: '設備清單', width: 50 },
@@ -1745,9 +1814,7 @@ const App = () => {
       exportToExcel(units, '進攻對象概覽', '對象清單', headers);
     };
     
-    // ... rest of Tab3 code ...
     return (
-        // ... (Render code remains similar, passing updated handlers)
         <div className="space-y-8 p-6 max-w-7xl mx-auto">
             {/* ... Header and Status Cards ... */}
             <div className="flex justify-between items-center mb-6">
@@ -1755,7 +1822,6 @@ const App = () => {
                     <MapPin className="w-8 h-8 text-indigo-600" />
                     <h2 className="text-3xl font-extrabold text-slate-800">戰情地圖與對象總覽</h2>
                 </div>
-                {/* ... Incomplete Units Warning ... */}
             </div>
             
             {/* ... Status Cards Grid ... */}
@@ -1895,8 +1961,6 @@ const App = () => {
     );
   };
 
-  // ... (FilterInput, FilterSelect remain same)
-
   const UnitTable = ({
     units,
     selectedUnitIds,
@@ -1913,7 +1977,7 @@ const App = () => {
               <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">選取</th>
               <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">單位資訊</th>
               <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">位置</th>
-              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">聯絡人</th>
+              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">主要聯絡人</th>
               <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">狀態/分組</th>
               <th className="p-3 text-right text-xs font-bold uppercase tracking-wider">檢視</th>
             </tr>
@@ -1935,8 +1999,8 @@ const App = () => {
                   <div className="text-xs">{unit.floor ? `${unit.floor}` : ''} {unit.roomNumber ? `${unit.roomNumber}` : ''}</div>
                 </td>
                 <td className="p-3 text-sm text-gray-600">
-                  <div>{unit.contactName}</div>
-                  <div className="text-xs text-gray-400">{unit.contactPhone}</div>
+                  <div>{unit.contactName1 || unit.contactName}</div>
+                  <div className="text-xs text-gray-400">{unit.contactPhone1 || unit.contactPhone}</div>
                 </td>
                 <td className="p-3 text-sm">
                   <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full ${unit.attackStatus === 'client' ? 'bg-emerald-100 text-emerald-800' : unit.attackStatus === 'settled_non_client' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
@@ -1957,8 +2021,6 @@ const App = () => {
       </div>
     );
   };
-
-  // ... (Tab4Record, useEffects same)
 
   const UnitRecordView = ({
     newUnitData,
@@ -1987,7 +2049,6 @@ const App = () => {
       ),
     ];
 
-    // Initialize defaults if undefined
     useEffect(() => {
         if(!newUnitData.floor) setNewUnitData(p => ({...p, floor: ''}));
         if(!newUnitData.roomNumber) setNewUnitData(p => ({...p, roomNumber: ''}));
@@ -1999,13 +2060,7 @@ const App = () => {
           <h3 className="text-2xl font-extrabold text-slate-800">
             {isNewUnit ? '新增進攻對象' : `編輯/紀錄: ${newUnitData.name}`}
           </h3>
-          <button
-            onClick={() => {
-              setEditingUnitId(null);
-              setIsNewUnit(false);
-            }}
-            className="text-gray-400 hover:text-gray-600"
-          >
+          <button onClick={() => { setEditingUnitId(null); setIsNewUnit(false); }} className="text-gray-400 hover:text-gray-600">
             <X className="w-6 h-6" />
           </button>
         </div>
@@ -2055,23 +2110,44 @@ const App = () => {
             </InputGroup>
           </div>
 
-          <InputGroup label="承辦姓名">
-            <input
-              type="text"
-              value={newUnitData.contactName || ''}
-              onChange={(e) => setNewUnitData((p) => ({ ...p, contactName: e.target.value }))}
-              className={styles.formInput}
-            />
-          </InputGroup>
-
-          <InputGroup label="電話">
-            <input
-              type="text"
-              value={newUnitData.contactPhone || ''}
-              onChange={(e) => setNewUnitData((p) => ({ ...p, contactPhone: e.target.value }))}
-              className={styles.formInput}
-            />
-          </InputGroup>
+          <div className="col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
+             <div>
+                <InputGroup label="承辦 1 (主要)">
+                    <div className="flex gap-1 mb-1">
+                        <User className="w-4 h-4 text-gray-400 mt-3"/>
+                        <input type="text" value={newUnitData.contactName1 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactName1: e.target.value}))} className={styles.formInput} placeholder="姓名" />
+                    </div>
+                    <div className="flex gap-1">
+                        <Phone className="w-4 h-4 text-gray-400 mt-3"/>
+                        <input type="text" value={newUnitData.contactPhone1 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone1: e.target.value}))} className={styles.formInput} placeholder="電話" />
+                    </div>
+                </InputGroup>
+             </div>
+             <div>
+                <InputGroup label="承辦 2">
+                    <div className="flex gap-1 mb-1">
+                        <User className="w-4 h-4 text-gray-400 mt-3"/>
+                        <input type="text" value={newUnitData.contactName2 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactName2: e.target.value}))} className={styles.formInput} placeholder="姓名" />
+                    </div>
+                    <div className="flex gap-1">
+                        <Phone className="w-4 h-4 text-gray-400 mt-3"/>
+                        <input type="text" value={newUnitData.contactPhone2 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone2: e.target.value}))} className={styles.formInput} placeholder="電話" />
+                    </div>
+                </InputGroup>
+             </div>
+             <div>
+                <InputGroup label="承辦 3">
+                    <div className="flex gap-1 mb-1">
+                        <User className="w-4 h-4 text-gray-400 mt-3"/>
+                        <input type="text" value={newUnitData.contactName3 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactName3: e.target.value}))} className={styles.formInput} placeholder="姓名" />
+                    </div>
+                    <div className="flex gap-1">
+                        <Phone className="w-4 h-4 text-gray-400 mt-3"/>
+                        <input type="text" value={newUnitData.contactPhone3 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone3: e.target.value}))} className={styles.formInput} placeholder="電話" />
+                    </div>
+                </InputGroup>
+             </div>
+          </div>
 
           <InputGroup label="獨立空間分組">
               <select
@@ -2111,10 +2187,10 @@ const App = () => {
         <div className="border-t border-slate-100 my-6"></div>
 
         {/* Section 2: Equipment & Characteristics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-8">
           <div className="bg-indigo-50/50 p-6 rounded-xl border border-indigo-100">
             <h4 className="text-lg font-bold mb-4 text-indigo-800 flex items-center">
-              <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
+              <Printer className="w-5 h-5 mr-2" />
               設備清單 ({equipment?.length || 0})
             </h4>
             <EquipmentAdder
@@ -2134,17 +2210,61 @@ const App = () => {
               equipmentSearch={equipmentSearch}
               setEquipmentSearch={setEquipmentSearch}
             />
-            <EquipmentList
-              equipment={equipment}
-              setNewUnitData={setNewUnitData}
-            />
+            {/* Show Equipment List with History */}
+            <div className="space-y-4 mt-6">
+                {(equipment || []).map((eq) => (
+                    <div key={eq.id} className="bg-white border border-indigo-100 rounded-xl shadow-sm p-4">
+                        <div className="flex justify-between items-start mb-2">
+                            <div>
+                                <span className="text-lg font-bold text-slate-800 flex items-center">
+                                    {eq.brand} {eq.model}
+                                    <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{eq.type}</span>
+                                </span>
+                                <div className="text-sm text-slate-600 mt-1 space-y-1">
+                                    <p>方案: <span className="font-semibold">{eq.plan || '未指定'}</span></p>
+                                    <p>廠商: <span className="font-semibold">{eq.vendor || '未指定'}</span></p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setNewUnitData((p) => ({ ...p, equipment: p.equipment.filter((e) => e.id !== eq.id) }))}
+                                className="text-gray-300 hover:text-red-500 transition p-1"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        {/* Inline Read-Only History for this Machine */}
+                        <div className="mt-3 pt-3 border-t border-gray-100">
+                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
+                                <History className="w-3 h-3 mr-1"/> 最近拜訪紀錄 (本機台)
+                            </h5>
+                            <div className="space-y-1">
+                                {history
+                                    ?.filter(h => h.relatedEquipmentId === eq.id)
+                                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                    .slice(0, 10)
+                                    .map(log => (
+                                        <div key={log.id} className="text-xs flex justify-between text-slate-600 bg-slate-50 px-2 py-1 rounded">
+                                            <span>{log.date}</span>
+                                            <span className="font-medium truncate max-w-[200px]">{log.activity}</span>
+                                        </div>
+                                    ))
+                                }
+                                {(!history?.some(h => h.relatedEquipmentId === eq.id)) && (
+                                    <p className="text-xs text-gray-300 italic">尚無針對此機台的紀錄</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
           </div>
           
           <div className="space-y-6">
              {/* Characteristics */}
              <div className="bg-amber-50/50 p-6 rounded-xl border border-amber-100">
                 <h4 className="text-lg font-bold mb-4 text-amber-800 flex items-center">
-                <span className="w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
+                <Target className="w-5 h-5 mr-2" />
                 客戶特性
                 </h4>
                 <CharacteristicsEditor
@@ -2152,19 +2272,32 @@ const App = () => {
                 setNewUnitData={setNewUnitData}
                 />
             </div>
+          </div>
+        </div>
 
-            {/* Read-Only History List (Last 10) */}
-            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                <h4 className="text-lg font-bold mb-4 text-slate-800 flex items-center justify-between">
-                    <span className="flex items-center"><span className="w-2 h-2 bg-slate-500 rounded-full mr-2"></span> 拜訪狀況 (最近10筆)</span>
-                    <span className="text-xs font-normal text-slate-500 bg-white px-2 py-1 rounded border">只讀覽不寫入</span>
-                </h4>
-                <div className="space-y-2">
-                    {(history || [])
-                        .sort((a, b) => new Date(b.date) - new Date(a.date))
-                        .slice(0, 10) // Limit to 10
-                        .map((log) => (
-                        <div key={log.id} className="text-sm border-b border-slate-200 pb-2 last:border-0">
+        <div className="border-t border-slate-100 my-6"></div>
+
+        {/* Section 3: Visit Log Input (Keep Write Access Here) */}
+        <div className="bg-emerald-50/30 p-6 rounded-xl border border-emerald-100">
+          <h4 className="text-lg font-bold mb-4 text-emerald-800 flex items-center">
+            <Edit className="w-5 h-5 mr-2" />
+            新增拜訪紀錄 (寫入)
+          </h4>
+          <HistoryLogAdder 
+            onAdd={handleAddHistory} 
+            equipmentList={equipment} // Pass equipment list to allow selection
+          />
+          
+          {/* General History List (Non-machine specific or All) */}
+          <div className="mt-6">
+             <h5 className="text-sm font-bold text-slate-500 mb-2">一般/其他拜訪紀錄 (最近10筆)</h5>
+             <div className="space-y-2">
+                {history
+                    ?.filter(h => !h.relatedEquipmentId) // Show logs not tied to specific machines here
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .slice(0, 10)
+                    .map(log => (
+                        <div key={log.id} className="text-sm border-b border-emerald-100 pb-2 last:border-0 bg-white/50 p-2 rounded">
                             <div className="flex justify-between font-medium text-slate-700">
                                 <span>{log.date}</span>
                                 <span>{log.activity}</span>
@@ -2176,22 +2309,10 @@ const App = () => {
                                 </div>
                             )}
                         </div>
-                    ))}
-                    {(!history || history.length === 0) && <p className="text-xs text-slate-400 text-center">尚無拜訪紀錄</p>}
-                </div>
-            </div>
+                    ))
+                }
+             </div>
           </div>
-        </div>
-
-        <div className="border-t border-slate-100 my-6"></div>
-
-        {/* Section 3: Visit Log Input (Keep Write Access Here) */}
-        <div className="bg-emerald-50/30 p-6 rounded-xl border border-emerald-100">
-          <h4 className="text-lg font-bold mb-4 text-emerald-800 flex items-center">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
-            新增拜訪紀錄 (寫入)
-          </h4>
-          <HistoryLogAdder onAdd={handleAddHistory} />
         </div>
 
         <div className="flex justify-end space-x-4 pt-6">
@@ -2215,8 +2336,6 @@ const App = () => {
     );
   };
 
-  // ... (StatusCard, InputGroup)
-
   const EquipmentAdder = ({
     availableBrands,
     availableModels,
@@ -2226,11 +2345,11 @@ const App = () => {
     equipmentSearch,
     setEquipmentSearch,
   }) => {
-    const [newEq, setNewEq] = useState({ brand: '', model: '', type: '', plan: '' });
+    const [newEq, setNewEq] = useState({ brand: '', model: '', type: '', plan: '租賃', vendor: '' });
     const handleAdd = () => {
       if (newEq.brand && newEq.model && newEq.type) {
         onAdd(newEq);
-        setNewEq({ brand: '', model: '', type: '', plan: '' });
+        setNewEq({ brand: '', model: '', type: '', plan: '租賃', vendor: '' });
         setEquipmentSearch({ brand: '', model: '' });
       } else {
         alert('請填寫完整的設備資訊。');
@@ -2291,14 +2410,24 @@ const App = () => {
               </option>
             ))}
           </select>
+          <select
+            value={newEq.plan}
+            onChange={(e) => setNewEq(p => ({...p, plan: e.target.value}))}
+            className={`${styles.formSelect} flex-1`}
+          >
+             <option value="租賃">租賃</option>
+             <option value="買斷">買斷</option>
+             <option value="買斷(維護合約)">買斷(維護合約)</option>
+             <option value="借用">借用</option>
+          </select>
         </div>
         <div className="flex gap-2">
             <input 
                 type="text" 
-                value={newEq.plan} 
-                onChange={(e) => setNewEq(p => ({...p, plan: e.target.value}))}
+                value={newEq.vendor} 
+                onChange={(e) => setNewEq(p => ({...p, vendor: e.target.value}))}
                 className={`${styles.formInput} flex-grow`} 
-                placeholder="現有方案 (e.g. 租賃/買斷/價格)"
+                placeholder="配合廠商"
             />
             <button
                 onClick={handleAdd}
@@ -2312,33 +2441,9 @@ const App = () => {
   };
 
   const EquipmentList = ({ equipment, setNewUnitData }) => (
-    <div className="space-y-2 mt-4 max-h-48 overflow-y-auto pr-1">
-      {(equipment || []).map((eq) => (
-        <div
-          key={eq.id}
-          className="flex justify-between items-center p-3 bg-white border border-indigo-100 rounded-lg shadow-sm"
-        >
-          <div className="text-sm">
-            <span className="font-bold text-slate-800">
-              {eq.brand} {eq.model}
-            </span>
-            <span className="block text-xs text-slate-500">{eq.type}</span>
-            {eq.plan && <span className="block text-xs text-indigo-600 mt-1 font-medium">方案: {eq.plan}</span>}
-          </div>
-          <button
-            onClick={() =>
-              setNewUnitData((p) => ({
-                ...p,
-                equipment: p.equipment.filter((e) => e.id !== eq.id),
-              }))
-            }
-            className="text-gray-400 hover:text-red-500 transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
-    </div>
+      // This logic is now moved directly into UnitRecordView to support inline history display context
+      // Keeping this empty function to avoid breakages if referenced elsewhere, though logically deprecated
+      <></>
   );
 
   const CharacteristicsEditor = ({ characteristics, setNewUnitData }) => {
@@ -2396,12 +2501,13 @@ const App = () => {
     );
   };
 
-  const HistoryLogAdder = ({ onAdd }) => {
+  const HistoryLogAdder = ({ onAdd, equipmentList }) => {
     const [newLog, setNewLog] = useState({
       activity: '',
       item: '',
       quantity: 1,
       supplement: '',
+      relatedEquipmentId: '' // New Field for linking
     });
 
     const handleAdd = () => {
@@ -2412,8 +2518,9 @@ const App = () => {
             ? [{ item: newLog.item, quantity: newLog.quantity }]
             : [],
           characteristicSupplement: newLog.supplement,
+          relatedEquipmentId: newLog.relatedEquipmentId
         });
-        setNewLog({ activity: '', item: '', quantity: 1, supplement: '' });
+        setNewLog({ activity: '', item: '', quantity: 1, supplement: '', relatedEquipmentId: '' });
       } else {
         alert('請填寫實際行為。');
       }
@@ -2421,15 +2528,30 @@ const App = () => {
 
     return (
       <div className="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 space-y-3">
-        <input
-          type="text"
-          value={newLog.activity}
-          onChange={(e) =>
-            setNewLog((p) => ({ ...p, activity: e.target.value }))
-          }
-          className={`${styles.formInput} font-medium`}
-          placeholder="行為紀錄 (e.g. 設備demo)"
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <select 
+                value={newLog.relatedEquipmentId} 
+                onChange={(e) => setNewLog(p => ({...p, relatedEquipmentId: e.target.value}))}
+                className={styles.formSelect}
+            >
+                <option value="">一般紀錄 (不指定機台)</option>
+                {equipmentList?.map(eq => (
+                    <option key={eq.id} value={eq.id}>
+                        針對: {eq.brand} {eq.model}
+                    </option>
+                ))}
+            </select>
+            <input
+            type="text"
+            value={newLog.activity}
+            onChange={(e) =>
+                setNewLog((p) => ({ ...p, activity: e.target.value }))
+            }
+            className={`${styles.formInput} font-medium`}
+            placeholder="行為紀錄 (e.g. 設備demo)"
+            />
+        </div>
+        
         <div className="flex gap-2">
           <input
             type="text"
@@ -2471,228 +2593,9 @@ const App = () => {
   };
 
   const HistoryLogList = ({ history }) => (
-    <div className="mt-6">
-      <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
-        歷史紀錄
-      </h4>
-      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-        {(history || [])
-          .sort((a, b) => new Date(b.date) - new Date(a.date))
-          .map((log) => (
-            <div
-              key={log.id}
-              className="p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md transition"
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className="font-bold text-slate-800">{log.activity}</span>
-                <span className="text-xs text-slate-400 font-mono">
-                  {log.date}
-                </span>
-              </div>
-              {(log.promotionalItems || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {log.promotionalItems.map((item, i) => (
-                    <span
-                      key={i}
-                      className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full font-medium"
-                    >
-                      {item.item} x{item.quantity}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {log.characteristicSupplement && (
-                <p className="text-xs text-slate-500 mt-2 bg-slate-50 p-2 rounded">
-                  {log.characteristicSupplement}
-                </p>
-              )}
-            </div>
-          ))}
-      </div>
-    </div>
+      // Deprecated in favor of inline lists inside UnitRecordView
+      <></>
   );
-
-  // --- Tab 5: 參數設定 ---
-  const Tab5Settings = () => {
-    const [newBuilding, setNewBuilding] = useState({ name: '', code: '' });
-    const [newEquipment, setNewEquipment] = useState({
-      brand: '',
-      model: '',
-      type: '',
-    });
-
-    const handleUpdateSettings = async (field, value) => {
-      await updatePrivateData({ [field]: value });
-    };
-
-    const handleAddBuilding = () => {
-      if (newBuilding.name && newBuilding.code) {
-        const updatedBuildings = [...appData.settings.buildings, newBuilding];
-        handleUpdateSettings('buildings', updatedBuildings);
-        setNewBuilding({ name: '', code: '' });
-      }
-    };
-
-    const handleDeleteBuilding = (code) => {
-      const updatedBuildings = appData.settings.buildings.filter(
-        (b) => b.code !== code
-      );
-      handleUpdateSettings('buildings', updatedBuildings);
-    };
-
-    const handleAddEquipmentDB = () => {
-      if (newEquipment.brand && newEquipment.model && newEquipment.type) {
-        const updatedDB = [...appData.settings.equipmentDB, newEquipment];
-        handleUpdateSettings('equipmentDB', updatedDB);
-
-        if (!appData.settings.machineTypes.includes(newEquipment.type)) {
-          handleUpdateSettings('machineTypes', [
-            ...appData.settings.machineTypes,
-            newEquipment.type,
-          ]);
-        }
-        setNewEquipment({ brand: '', model: '', type: '' });
-      }
-    };
-
-    const handleDeleteEquipmentDB = (brand, model) => {
-      const updatedDB = appData.settings.equipmentDB.filter(
-        (e) => !(e.brand === brand && e.model === model)
-      );
-      handleUpdateSettings('equipmentDB', updatedDB);
-    };
-
-    return (
-      <div className="space-y-8 p-6 max-w-7xl mx-auto">
-        <div className="flex items-center space-x-3 mb-6">
-          <Edit className="w-8 h-8 text-indigo-600" />
-          <h2 className="text-3xl font-extrabold text-slate-800">參數設定</h2>
-        </div>
-
-        {/* 1. 棟別/校區名稱設定 */}
-        <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
-          <h3 className="text-xl font-bold mb-6 text-slate-800 border-b pb-2 flex items-center">
-            <Building className="w-5 h-5 mr-2 text-indigo-500" /> 棟別設定
-          </h3>
-          <div className="flex flex-wrap gap-3 mb-6 bg-slate-50 p-4 rounded-xl">
-            <input
-              type="text"
-              value={newBuilding.name}
-              onChange={(e) =>
-                setNewBuilding((p) => ({ ...p, name: e.target.value }))
-              }
-              className={`${styles.formInput} flex-grow`}
-              placeholder="名稱 (e.g. 行政大樓)"
-            />
-            <input
-              type="text"
-              value={newBuilding.code}
-              onChange={(e) =>
-                setNewBuilding((p) => ({ ...p, code: e.target.value }))
-              }
-              className={`${styles.formInput} w-24`}
-              placeholder="代號"
-            />
-            <button
-              onClick={handleAddBuilding}
-              className={styles.btnPrimary}
-            >
-              <Plus className="w-4 h-4 mr-1" /> 新增
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {appData.settings.buildings.map((b) => (
-              <div
-                key={b.code}
-                className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-indigo-300 transition"
-              >
-                <p className="text-slate-700 font-medium">
-                  {b.name}{' '}
-                  <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">
-                    {b.code}
-                  </span>
-                </p>
-                <button
-                  onClick={() => handleDeleteBuilding(b.code)}
-                  className="text-slate-400 hover:text-red-500 transition"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 2. 設備資料庫設定 */}
-        <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
-          <h3 className="text-xl font-bold mb-6 text-slate-800 border-b pb-2 flex items-center">
-            <Activity className="w-5 h-5 mr-2 text-indigo-500" /> 設備資料庫
-          </h3>
-          <div className="flex flex-wrap gap-3 mb-6 bg-slate-50 p-4 rounded-xl">
-            <select
-              value={newEquipment.type}
-              onChange={(e) =>
-                setNewEquipment((p) => ({ ...p, type: e.target.value }))
-              }
-              className={`${styles.formSelect} flex-1 min-w-[150px]`}
-            >
-              <option value="">選擇類型</option>
-              {appData.settings.machineTypes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={newEquipment.brand}
-              onChange={(e) =>
-                setNewEquipment((p) => ({ ...p, brand: e.target.value }))
-              }
-              className={`${styles.formInput} flex-1 min-w-[120px]`}
-              placeholder="廠牌"
-            />
-            <input
-              type="text"
-              value={newEquipment.model}
-              onChange={(e) =>
-                setNewEquipment((p) => ({ ...p, model: e.target.value }))
-              }
-              className={`${styles.formInput} flex-1 min-w-[120px]`}
-              placeholder="型號"
-            />
-            <button
-              onClick={handleAddEquipmentDB}
-              className={styles.btnPrimary}
-            >
-              <Plus className="w-4 h-4 mr-1" /> 新增
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-            {appData.settings.equipmentDB.map((e, index) => (
-              <div
-                key={index}
-                className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg shadow-sm"
-              >
-                <div>
-                  <span className="font-bold text-slate-800">
-                    {e.brand} {e.model}
-                  </span>
-                  <span className="block text-xs text-slate-500">{e.type}</span>
-                </div>
-                <button
-                  onClick={() => handleDeleteEquipmentDB(e.brand, e.model)}
-                  className="text-slate-400 hover:text-red-500 transition"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderTabContent = () => {
     switch (currentTab) {
