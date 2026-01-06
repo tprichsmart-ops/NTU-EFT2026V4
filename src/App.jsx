@@ -1931,7 +1931,7 @@ const App = () => {
                 }
                 className={`${styles.formInput} w-24 bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:ring-slate-500`}
                 placeholder="輸入區號"
-                disabled={mapState.isDrawing}
+                // REMOVE DISABLED: Let user type code anytime
               />
               {!mapState.isDrawing ? (
                   <button
@@ -2006,7 +2006,8 @@ const App = () => {
                     )}
 
                     {/* SVG Overlay for Polygons */}
-                    <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                    {/* ADDED VIEWBOX to match % coordinates (0-100) */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                         {/* Existing Areas */}
                         {areaMap.map((area) => {
                             // Support legacy rects and new polygons
@@ -2029,7 +2030,7 @@ const App = () => {
                                         points={pointsStr}
                                         fill="rgba(255, 0, 0, 0.3)" 
                                         stroke="red"
-                                        strokeWidth="2"
+                                        strokeWidth="0.5" // use smaller width as viewBox is 100x100
                                         vectorEffect="non-scaling-stroke"
                                         className="transition-all hover:fill-red-500/50"
                                     />
@@ -2044,12 +2045,12 @@ const App = () => {
                                     points={polyPoints.map(p => `${p.x},${p.y}`).join(" ")}
                                     fill="none"
                                     stroke="red"
-                                    strokeWidth="2"
-                                    strokeDasharray="4 2"
+                                    strokeWidth="0.5"
+                                    strokeDasharray="1 1" // smaller dash for viewBox scale
                                     vectorEffect="non-scaling-stroke"
                                 />
                                 {polyPoints.map((p, i) => (
-                                    <circle cx={`${p.x}%`} cy={`${p.y}%`} r="3" fill="white" stroke="red" strokeWidth="2" key={i} />
+                                    <circle cx={p.x} cy={p.y} r="0.5" fill="white" stroke="red" strokeWidth="0.1" key={i} />
                                 ))}
                             </g>
                         )}
@@ -2078,7 +2079,7 @@ const App = () => {
                                 <div 
                                     key={area.id}
                                     style={{ left: `${centerX}%`, top: `${centerY}%` }}
-                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-auto group/label flex flex-col items-center"
+                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-auto group/label flex flex-col items-center z-50"
                                 >
                                      <span className="bg-red-600 text-white text-xs px-2 py-1 rounded shadow-lg font-bold whitespace-nowrap border border-white">
                                         {area.code} ({unitInArea})
