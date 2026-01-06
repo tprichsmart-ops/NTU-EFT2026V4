@@ -224,7 +224,7 @@ const FilterSelect = ({ label, value, onChange, children }) => (
   </div>
 );
 
-// --- Unit Table Component (Extracted to fix ReferenceError) ---
+// --- Unit Table Component ---
 const UnitTable = ({
   units,
   selectedUnitIds,
@@ -232,6 +232,7 @@ const UnitTable = ({
   setCurrentTab,
   setEditingUnitId,
   setIsNewUnit,
+  setNewUnitData
 }) => {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -610,27 +611,47 @@ const App = () => {
         history: safeParse(currentUnit.history),
       });
     } else if (isNewUnit) {
-      setNewUnitData({
-        name: '',
-        buildingId: '',
-        floor: '',
-        roomNumber: '',
-        contactName1: '', contactPhone1: '',
-        contactName2: '', contactPhone2: '',
-        contactName3: '', contactPhone3: '',
-        subgroup: '',
-        attackStatus: 'engaged',
-        category: 'Academic',
-        areaCode: '',
-        equipment: [],
-        characteristics: [],
-        history: [],
-        // Legacy fields cleanup to prevent undefined
-        contactName: '',
-        contactPhone: ''
-      });
+      // Initialization handled by button click
     }
   }, [editingUnitId, isNewUnit, appData.units]);
+
+  const handleAddHistory = (newLog) => {
+    const logEntry = {
+      ...newLog,
+      date: new Date().toISOString().substring(0, 10),
+      id: crypto.randomUUID(),
+    };
+    setNewUnitData((prev) => ({
+      ...prev,
+      history: [...prev.history, logEntry],
+    }));
+  };
+
+  const handleSaveUnit = async () => {
+    if (!newUnitData.name) {
+      alert('單位名稱是必填項。');
+      return;
+    }
+    const dataToSave = {
+      ...newUnitData,
+      subgroup:
+        newUnitData.category === 'Academic' ? newUnitData.subgroup : '',
+    };
+
+    if (isNewUnit) {
+      await addDoc(getUnitCollectionRef(db), {
+        ...dataToSave,
+        createdAt: new Date().toISOString(),
+        equipment: safeStringify(dataToSave.equipment || []),
+        history: safeStringify(dataToSave.history || []),
+        characteristics: dataToSave.characteristics || [],
+      });
+    } else {
+      await updateUnit(editingUnitId, dataToSave);
+    }
+    setEditingUnitId(null);
+    setIsNewUnit(false);
+  };
 
   const LoadingState = () => (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-500">
@@ -642,6 +663,7 @@ const App = () => {
 
   // --- Tab 1: 進攻行事曆 ---
   const Tab1Calendar = () => {
+    // ... (Calendar Logic same as before)
     const totalUnits = appData.units.length;
     const currentClients = appData.units.filter(
       (u) => u.attackStatus === 'client'
@@ -1916,6 +1938,34 @@ const App = () => {
                 <StatusCard title="學術單位" value={academicUnits} gradient="from-sky-500 to-blue-600" icon={<Users className="w-6 h-6 text-white" />} />
             </div>
 
+            {/* Unit Distribution Block (Restored) */}
+            <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex flex-col md:flex-row gap-8 items-center justify-around bg-gradient-to-br from-white to-indigo-50/30">
+              <div className="text-center w-full md:w-1/3 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                <p className="font-bold text-xl text-orange-600 mb-2">行政單位</p>
+                <div className="flex justify-between items-center text-slate-700 px-4">
+                  <span>總數: {adminUnits}</span>
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold bg-orange-200 px-2 py-1 rounded-md text-orange-800">
+                      獨立空間: {adminSubgroups}
+                    </span>
+                    <span className="text-[10px] text-orange-600/70 mt-1">(大單位底下獨立空間)</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-center w-full md:w-1/3 p-4 bg-sky-50 rounded-xl border border-sky-100">
+                <p className="font-bold text-xl text-sky-600 mb-2">學術單位</p>
+                <div className="flex justify-between items-center text-slate-700 px-4">
+                  <span>總數: {academicUnits}</span>
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold bg-sky-200 px-2 py-1 rounded-md text-sky-800">
+                      獨立空間: {academicSubgroups}
+                    </span>
+                    <span className="text-[10px] text-sky-600/70 mt-1">(大單位底下獨立空間)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ... Map Section ... */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col h-[800px] relative">
                 {/* ... Map Controls & Display ... */}
@@ -2025,7 +2075,28 @@ const App = () => {
                                 <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImport} />
                                 <FileUp className="w-4 h-4 mr-1"/> 匯入資料
                             </label>
-                            <button onClick={() => { setEditingUnitId(null); setIsNewUnit(true); setCurrentTab('record'); }} className={`${styles.btnPrimary} py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700`}>
+                            <button onClick={() => { 
+                                setEditingUnitId(null); 
+                                // Explicitly initialize state here to avoid crash on first render
+                                setNewUnitData({
+                                    name: '',
+                                    buildingId: '',
+                                    floor: '',
+                                    roomNumber: '',
+                                    contactName1: '', contactPhone1: '',
+                                    contactName2: '', contactPhone2: '',
+                                    contactName3: '', contactPhone3: '',
+                                    subgroup: '',
+                                    attackStatus: 'engaged',
+                                    category: 'Academic',
+                                    areaCode: '',
+                                    equipment: [],
+                                    characteristics: [],
+                                    history: []
+                                });
+                                setIsNewUnit(true); 
+                                setCurrentTab('record'); 
+                            }} className={`${styles.btnPrimary} py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700`}>
                                 <Plus className="w-4 h-4 mr-1"/> 新增單筆
                             </button>
                         </div>
@@ -2056,8 +2127,8 @@ const App = () => {
       { key: 'category', label: '類型', width: 10 },
       { key: 'areaCode', label: '區域', width: 10 },
       { key: 'name', label: '客戶名稱', width: 25 },
-      { key: 'contactName', label: '聯絡人', width: 15 },
-      { key: 'contactPhone', label: '電話', width: 15 },
+      { key: 'contactName1', label: '聯絡人', width: 15 },
+      { key: 'contactPhone1', label: '電話', width: 15 },
       { key: 'attackStatus', label: '進攻狀態', width: 15 },
     ];
     const exportRecordUnits = () => {
@@ -2125,6 +2196,22 @@ const App = () => {
           <button
             onClick={() => {
               setEditingUnitId(null);
+              setNewUnitData({
+                  name: '',
+                  buildingId: '',
+                  floor: '',
+                  roomNumber: '',
+                  contactName1: '', contactPhone1: '',
+                  contactName2: '', contactPhone2: '',
+                  contactName3: '', contactPhone3: '',
+                  subgroup: '',
+                  attackStatus: 'engaged',
+                  category: 'Academic',
+                  areaCode: '',
+                  equipment: [],
+                  characteristics: [],
+                  history: []
+              });
               setIsNewUnit(true);
             }}
             className={styles.btnPrimary}
@@ -2167,10 +2254,10 @@ const App = () => {
                       {unit.name}
                     </td>
                     <td className="p-3 text-sm text-gray-600">
-                      {unit.contactName}
+                      {unit.contactName1}
                     </td>
                     <td className="p-3 text-sm text-gray-600">
-                      {unit.contactPhone}
+                      {unit.contactPhone1}
                     </td>
                     <td className="p-3 text-sm">
                       <span
