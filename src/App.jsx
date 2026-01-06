@@ -1630,6 +1630,7 @@ const App = () => {
       isDrawing: false,
       start: null,
       current: null,
+      areaCodeInput: '',
       uploadedFile: null,
     });
 
@@ -1680,7 +1681,7 @@ const App = () => {
         updatePrivateData({ areaMap: [...areaMap, newArea] });
         
         // Reset state
-        setMapState(p => ({ ...p, isDrawing: false }));
+        setMapState(p => ({ ...p, isDrawing: false, areaCodeInput: '' }));
         setPolyPoints([]);
     };
 
@@ -1923,7 +1924,8 @@ const App = () => {
                     onClick={() =>
                       setMapState((p) => ({
                         ...p,
-                        isDrawing: true
+                        isDrawing: true,
+                        areaCodeInput: ''
                       }))
                     }
                     className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent bg-indigo-600 hover:bg-indigo-500 text-white`}
@@ -2009,13 +2011,12 @@ const App = () => {
                             }
 
                             return (
-                                <g key={area.id} className="group/area pointer-events-auto cursor-pointer">
+                                <g key={area.id} className={`group/area ${mapState.isDrawing ? 'pointer-events-none' : 'pointer-events-auto cursor-pointer'}`}>
                                     <polygon
                                         points={pointsStr}
                                         fill="rgba(255, 0, 0, 0.3)" 
                                         stroke="red"
                                         strokeWidth="0.5" // use smaller width as viewBox is 100x100
-                                        vectorEffect="non-scaling-stroke"
                                         className="transition-all hover:fill-red-500/50"
                                     />
                                 </g>
@@ -2031,7 +2032,6 @@ const App = () => {
                                     stroke="red"
                                     strokeWidth="0.5"
                                     strokeDasharray="1 1" // smaller dash for viewBox scale
-                                    vectorEffect="non-scaling-stroke"
                                 />
                                 {polyPoints.map((p, i) => (
                                     <circle cx={p.x} cy={p.y} r="0.5" fill="white" stroke="red" strokeWidth="0.1" key={i} />
@@ -2063,7 +2063,7 @@ const App = () => {
                                 <div 
                                     key={area.id}
                                     style={{ left: `${centerX}%`, top: `${centerY}%` }}
-                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-auto group/label flex flex-col items-center z-50"
+                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 group/label flex flex-col items-center z-50 ${mapState.isDrawing ? 'pointer-events-none opacity-50' : 'pointer-events-auto'}`}
                                 >
                                      <span className="bg-red-600 text-white text-xs px-2 py-1 rounded shadow-lg font-bold whitespace-nowrap border border-white">
                                         {area.code} ({unitInArea})
