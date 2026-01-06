@@ -41,7 +41,8 @@ import {
   Image as ImageIcon,
   UploadCloud,
   FileUp,
-  AlertCircle
+  AlertCircle,
+  Link as LinkIcon
 } from 'lucide-react';
 
 // --- Global Firebase Configuration and Utility Functions ---
@@ -64,47 +65,19 @@ const safeParse = (data) => {
   }
 };
 
-// --- Image Compression Utility (Critical for Firestore Storage) ---
-// Firestore limits documents to 1MB. Base64 strings of raw images often exceed this.
-const compressImage = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1200; // Limit width to 1200px
-        const MAX_HEIGHT = 1200;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        // Compress to JPEG with 0.6 quality (High compression, decent visibility)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-        resolve(dataUrl);
-      };
-      img.onerror = (error) => reject(error);
-    };
-    reader.onerror = (error) => reject(error);
-  });
+// --- Google Drive Link Helper ---
+// Automatically converts Google Drive sharing links to embeddable image links
+const getEmbeddableMapUrl = (url) => {
+  if (!url) return '';
+  // Regex to extract File ID from common Google Drive link formats
+  const driveRegex = /(?:file\/d\/|id=|open\?id=)([-w]{25,})/;
+  const match = url.match(driveRegex);
+  
+  if (match && match[1]) {
+    // Convert to the export=view format which works for <img> tags (if public)
+    return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+  }
+  return url;
 };
 
 // --- Data Validation Helper ---
@@ -246,7 +219,7 @@ const initialSettings = {
     },
   ],
   areaMap: [],
-  uploadedMapUrl: 'https://placehold.co/1200x600/3B82F6/FFFFFF?text=Upload+Your+Campus+Map',
+  uploadedMapUrl: 'https://placehold.co/1200x600/3B82F6/FFFFFF?text=Paste+Image+URL',
 };
 
 // --- Custom Hook for Excel Export ---
@@ -330,7 +303,6 @@ const App = () => {
   const [userId, setUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
-  const [isUploading, setIsUploading] = useState(false);
 
   const [appData, setAppData] = useState({
     units: [],
@@ -1582,7 +1554,7 @@ const App = () => {
     );
   };
 
-  // --- Tab 3: Targets & Map (MODIFIED FOR IMAGE UPLOAD) ---
+  // --- Tab 3: Targets & Map (MODIFIED FOR IMAGE URL INPUT) ---
   const Tab3TargetsMap = () => {
     const { units, settings } = appData;
     const { areaMap, uploadedMapUrl, equipmentDB } = settings;
@@ -1651,6 +1623,8 @@ const App = () => {
       uploadedFile: null,
     });
 
+    const [mapUrlInput, setMapUrlInput] = useState('');
+
     const handleMapClick = (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -1705,26 +1679,14 @@ const App = () => {
         setMapState((p) => ({ ...p, current: { x, y } }));
       };
 
-    // --- FIX: Image Upload with Compression ---
-    const handleMapFileUpload = async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      setIsUploading(true);
-      try {
-        // Compress image first to avoid Firestore 1MB limit
-        const compressedBase64 = await compressImage(file);
-        
-        // Save to Firestore (Anonymous auth works here if Rules allow)
-        await updatePrivateData({ uploadedMapUrl: compressedBase64 });
-        setGlobalMessage({ text: '地圖上傳成功！(已壓縮)', type: 'success' });
-      } catch (error) {
-        console.error("Upload failed", error);
-        setGlobalMessage({ text: '圖片處理失敗，請試著使用較小的圖片。', type: 'error' });
-      } finally {
-        setIsUploading(false);
-        setMapState((p) => ({ ...p, uploadedFile: null }));
-      }
+    // --- NEW: Handle Map URL Submission ---
+    const handleMapUrlSubmit = async () => {
+      if (!mapUrlInput) return;
+      
+      const finalUrl = getEmbeddableMapUrl(mapUrlInput);
+      await updatePrivateData({ uploadedMapUrl: finalUrl });
+      setGlobalMessage({ text: '地圖連結設定成功！', type: 'success' });
+      setMapUrlInput('');
     };
 
     const deleteSelectedUnits = () => {
@@ -1982,22 +1944,23 @@ const App = () => {
                 {mapState.isDrawing ? '點擊結束' : '圈選區域'}
               </button>
 
-              {/* Upload Button */}
-              <label className={`${styles.btnPrimary} cursor-pointer flex items-center bg-indigo-600 hover:bg-indigo-700 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleMapFileUpload}
-                  disabled={isUploading}
+              {/* URL Input Button */}
+              <div className="flex items-center bg-slate-700 rounded-lg p-1 border border-slate-600 ml-2">
+                <input 
+                  type="text" 
+                  placeholder="貼上圖片連結 (Google Drive/Imgur)" 
+                  className="bg-transparent text-white text-xs px-2 outline-none w-48 placeholder-slate-400"
+                  value={mapUrlInput}
+                  onChange={(e) => setMapUrlInput(e.target.value)} 
                 />
-                {isUploading ? (
-                    <Loader className="w-4 h-4 mr-1 animate-spin" />
-                ) : (
-                    <UploadCloud className="w-4 h-4 mr-1" /> 
-                )}
-                {isUploading ? '處理中...' : '上傳地圖'}
-              </label>
+                <button 
+                  onClick={handleMapUrlSubmit} 
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white p-1.5 rounded-md transition"
+                  title="設定圖片"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2014,10 +1977,15 @@ const App = () => {
                   src={uploadedMapUrl} 
                   alt="Campus Map" 
                   className="w-full h-full object-cover transition-transform duration-500 ease-out"
+                  onError={(e) => {
+                    e.target.onerror = null; 
+                    // Fallback or alert logic could go here, but keeping it simple
+                    // Often Google Drive links might 403 if not public
+                  }}
                 />
             ) : (
                 <div className="w-full h-full flex items-center justify-center text-slate-400">
-                    <p>請上傳地圖圖片</p>
+                    <p>請輸入圖片連結</p>
                 </div>
             )}
 
