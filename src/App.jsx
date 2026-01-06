@@ -56,7 +56,6 @@ import {
 
 // --- Global Firebase Configuration and Utility Functions ---
 
-// FIX: Use __app_id directly without regex replacement to avoid path mismatch permissions errors
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'ntu-strategy-default-app';
 
 const firebaseConfig =
@@ -64,7 +63,6 @@ const firebaseConfig =
 const initialAuthToken =
   typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-// Helper to safely stringify and parse complex objects
 const safeStringify = (data) => JSON.stringify(data);
 const safeParse = (data) => {
   try {
@@ -74,35 +72,29 @@ const safeParse = (data) => {
   }
 };
 
-// --- Google Drive Link Helper ---
 const getEmbeddableMapUrl = (url) => {
   if (!url) return '';
   const driveRegex = /(?:file\/d\/|id=|open\?id=)([-w]{25,})/;
   const match = url.match(driveRegex);
   
   if (match && match[1]) {
-    // Use thumbnail endpoint with width=3000px to ensure high quality
     return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w3000`;
   }
   return url;
 };
 
-// --- Data Validation Helper ---
 const checkUnitCompleteness = (unit) => {
-  // Building and Name are strictly required as per user request
   const requiredFields = ['name', 'buildingId'];
   const missing = requiredFields.filter(field => !unit[field]);
   return missing.length === 0;
 };
 
-// --- Excel Import/Template Helpers ---
 const downloadImportTemplate = () => {
   if (typeof window.XLSX === 'undefined') {
     alert('Excel 工具尚未載入，請稍候再試');
     return;
   }
   
-  // Headers to match new requirements
   const headers = [
     '單位名稱 (必填)',
     '棟別代號 (必填)',
@@ -135,7 +127,6 @@ const downloadImportTemplate = () => {
   
   if (!ws['!dataValidation']) ws['!dataValidation'] = [];
 
-  // Group Validation (Column K -> Index 10)
   for (let r = range.s.r; r <= range.e.r; ++r) {
     ws['!dataValidation'].push({
       sqref: window.XLSX.utils.encode_cell({r: r, c: 10}),
@@ -148,7 +139,6 @@ const downloadImportTemplate = () => {
     });
   }
 
-  // Status Validation (Column L -> Index 11)
   for (let r = range.s.r; r <= range.e.r; ++r) {
     ws['!dataValidation'].push({
       sqref: window.XLSX.utils.encode_cell({r: r, c: 11}),
@@ -161,7 +151,6 @@ const downloadImportTemplate = () => {
     });
   }
 
-  // Category Validation (Column M -> Index 12)
   for (let r = range.s.r; r <= range.e.r; ++r) {
     ws['!dataValidation'].push({
       sqref: window.XLSX.utils.encode_cell({r: r, c: 12}),
@@ -234,6 +223,68 @@ const FilterSelect = ({ label, value, onChange, children }) => (
     </select>
   </div>
 );
+
+// --- Unit Table Component (Extracted to fix ReferenceError) ---
+const UnitTable = ({
+  units,
+  selectedUnitIds,
+  setSelectedUnitIds,
+  setCurrentTab,
+  setEditingUnitId,
+  setIsNewUnit,
+}) => {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-gray-200">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50 text-gray-500">
+          <tr>
+            <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">選取</th>
+            <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">單位資訊</th>
+            <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">位置</th>
+            <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">主要聯絡人</th>
+            <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">狀態/分組</th>
+            <th className="p-3 text-right text-xs font-bold uppercase tracking-wider">檢視</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-100">
+          {units.map((unit) => (
+            <tr key={unit.id} className="hover:bg-indigo-50/40 transition">
+              <td className="p-3">
+                <input type="checkbox" checked={selectedUnitIds.includes(unit.id)} onChange={() => setSelectedUnitIds((p) => p.includes(unit.id) ? p.filter((id) => id !== unit.id) : [...p, unit.id])} className={styles.checkbox} />
+              </td>
+              <td className="p-3">
+                <div className="text-sm font-bold text-gray-900">{unit.name}</div>
+                <div className="text-xs text-gray-500">
+                  <span className={`inline-block mr-1 px-1.5 rounded ${unit.category === 'Academic' ? 'bg-sky-100 text-sky-700' : 'bg-orange-100 text-orange-700'}`}>{unit.category === 'Academic' ? '學術' : '行政'}</span>
+                </div>
+              </td>
+              <td className="p-3 text-sm text-gray-600">
+                <div className="font-medium text-indigo-900">{unit.buildingId || '-'} 棟</div>
+                <div className="text-xs">{unit.floor ? `${unit.floor}` : ''} {unit.roomNumber ? `${unit.roomNumber}` : ''}</div>
+              </td>
+              <td className="p-3 text-sm text-gray-600">
+                <div>{unit.contactName1 || unit.contactName}</div>
+                <div className="text-xs text-gray-400">{unit.contactPhone1 || unit.contactPhone}</div>
+              </td>
+              <td className="p-3 text-sm">
+                <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full ${unit.attackStatus === 'client' ? 'bg-emerald-100 text-emerald-800' : unit.attackStatus === 'settled_non_client' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {unit.attackStatus === 'client' ? '本牌客戶' : unit.attackStatus === 'settled_non_client' ? '暫定結案' : '進攻中'}
+                </span>
+                {unit.subgroup && <div className="text-xs text-gray-500 mt-1">({unit.subgroup})</div>}
+              </td>
+              <td className="p-3 text-right">
+                <button onClick={() => { setCurrentTab('record'); setEditingUnitId(unit.id); setIsNewUnit(false); }} className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition border border-indigo-200">
+                  詳細
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {units.length === 0 && (<div className="p-8 text-center text-gray-400 bg-gray-50">尚無資料。</div>)}
+    </div>
+  );
+};
 
 // --- Initial Data Structures for Defaults ---
 
@@ -350,7 +401,6 @@ const useExcelExport = () => {
 // --- App Initialization and State Management ---
 
 const App = () => {
-  // --- STATE HOISTING: All State Hooks Defined at Top Level ---
   const [currentTab, setCurrentTab] = useState('targets');
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
@@ -366,7 +416,7 @@ const App = () => {
     meetings: [],
   });
 
-  // Unit Editing State (Moved to top level to fix ReferenceError)
+  // Unit Editing State
   const [editingUnitId, setEditingUnitId] = useState(null);
   const [isNewUnit, setIsNewUnit] = useState(false);
   const [newUnitData, setNewUnitData] = useState({});
@@ -547,6 +597,40 @@ const App = () => {
       console.error('Error deleting units:', e);
     }
   };
+
+  // --- UNIT EDIT/NEW EFFECT ---
+  // Ensuring newUnitData is fully initialized to avoid controlled/uncontrolled errors
+  useEffect(() => {
+    const currentUnit = appData.units.find((u) => u.id === editingUnitId);
+    if (editingUnitId && currentUnit) {
+      setIsNewUnit(false);
+      setNewUnitData({
+        ...currentUnit,
+        equipment: safeParse(currentUnit.equipment),
+        history: safeParse(currentUnit.history),
+      });
+    } else if (isNewUnit) {
+      setNewUnitData({
+        name: '',
+        buildingId: '',
+        floor: '',
+        roomNumber: '',
+        contactName1: '', contactPhone1: '',
+        contactName2: '', contactPhone2: '',
+        contactName3: '', contactPhone3: '',
+        subgroup: '',
+        attackStatus: 'engaged',
+        category: 'Academic',
+        areaCode: '',
+        equipment: [],
+        characteristics: [],
+        history: [],
+        // Legacy fields cleanup to prevent undefined
+        contactName: '',
+        contactPhone: ''
+      });
+    }
+  }, [editingUnitId, isNewUnit, appData.units]);
 
   const LoadingState = () => (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 text-slate-500">
@@ -1961,641 +2045,354 @@ const App = () => {
     );
   };
 
-  const UnitTable = ({
-    units,
-    selectedUnitIds,
-    setSelectedUnitIds,
-    setCurrentTab,
-    setEditingUnitId,
-    setIsNewUnit,
-  }) => {
-    return (
-      <div className="overflow-x-auto rounded-xl border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 text-gray-500">
-            <tr>
-              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">選取</th>
-              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">單位資訊</th>
-              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">位置</th>
-              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">主要聯絡人</th>
-              <th className="p-3 text-left text-xs font-bold uppercase tracking-wider">狀態/分組</th>
-              <th className="p-3 text-right text-xs font-bold uppercase tracking-wider">檢視</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {units.map((unit) => (
-              <tr key={unit.id} className="hover:bg-indigo-50/40 transition">
-                <td className="p-3">
-                  <input type="checkbox" checked={selectedUnitIds.includes(unit.id)} onChange={() => setSelectedUnitIds((p) => p.includes(unit.id) ? p.filter((id) => id !== unit.id) : [...p, unit.id])} className={styles.checkbox} />
-                </td>
-                <td className="p-3">
-                  <div className="text-sm font-bold text-gray-900">{unit.name}</div>
-                  <div className="text-xs text-gray-500">
-                    <span className={`inline-block mr-1 px-1.5 rounded ${unit.category === 'Academic' ? 'bg-sky-100 text-sky-700' : 'bg-orange-100 text-orange-700'}`}>{unit.category === 'Academic' ? '學術' : '行政'}</span>
-                  </div>
-                </td>
-                <td className="p-3 text-sm text-gray-600">
-                  <div className="font-medium text-indigo-900">{unit.buildingId || '-'} 棟</div>
-                  <div className="text-xs">{unit.floor ? `${unit.floor}` : ''} {unit.roomNumber ? `${unit.roomNumber}` : ''}</div>
-                </td>
-                <td className="p-3 text-sm text-gray-600">
-                  <div>{unit.contactName1 || unit.contactName}</div>
-                  <div className="text-xs text-gray-400">{unit.contactPhone1 || unit.contactPhone}</div>
-                </td>
-                <td className="p-3 text-sm">
-                  <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full ${unit.attackStatus === 'client' ? 'bg-emerald-100 text-emerald-800' : unit.attackStatus === 'settled_non_client' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
-                    {unit.attackStatus === 'client' ? '本牌客戶' : unit.attackStatus === 'settled_non_client' ? '暫定結案' : '進攻中'}
-                  </span>
-                  {unit.subgroup && <div className="text-xs text-gray-500 mt-1">({unit.subgroup})</div>}
-                </td>
-                <td className="p-3 text-right">
-                  <button onClick={() => { setCurrentTab('record'); setEditingUnitId(unit.id); setIsNewUnit(false); }} className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition border border-indigo-200">
-                    詳細
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {units.length === 0 && (<div className="p-8 text-center text-gray-400 bg-gray-50">尚無資料。</div>)}
-      </div>
+  const Tab4Record = () => {
+    const unitsList = appData.units.filter(
+      (unit) =>
+        (recordFilter.type === '' || unit.category === recordFilter.type) &&
+        (recordFilter.area === '' || unit.areaCode === recordFilter.area)
     );
-  };
 
-  const UnitRecordView = ({
-    newUnitData,
-    setNewUnitData,
-    handleSaveUnit,
-    handleAddHistory,
-    isNewUnit,
-    appData,
-    setEditingUnitId,
-    setIsNewUnit,
-  }) => {
-    const { equipment, characteristics, history } = newUnitData;
-
-    const [equipmentSearch, setEquipmentSearch] = useState({
-      brand: '',
-      model: '',
-    });
-    const availableBrands = [
-      ...new Set(appData.settings.equipmentDB.map((e) => e.brand)),
+    const unitTableHeaders = [
+      { key: 'category', label: '類型', width: 10 },
+      { key: 'areaCode', label: '區域', width: 10 },
+      { key: 'name', label: '客戶名稱', width: 25 },
+      { key: 'contactName', label: '聯絡人', width: 15 },
+      { key: 'contactPhone', label: '電話', width: 15 },
+      { key: 'attackStatus', label: '進攻狀態', width: 15 },
     ];
-    const availableModels = [
-      ...new Set(
-        appData.settings.equipmentDB
-          .filter((e) => e.brand === equipmentSearch.brand)
-          .map((e) => e.model)
-      ),
-    ];
+    const exportRecordUnits = () => {
+      exportToExcel(
+        unitsList,
+        '客戶拜訪紀錄清單',
+        '客戶清單',
+        unitTableHeaders
+      );
+    };
 
-    useEffect(() => {
-        if(!newUnitData.floor) setNewUnitData(p => ({...p, floor: ''}));
-        if(!newUnitData.roomNumber) setNewUnitData(p => ({...p, roomNumber: ''}));
-    }, []);
+    if (editingUnitId !== null || isNewUnit) {
+      return (
+        <UnitRecordView
+          newUnitData={newUnitData}
+          setNewUnitData={setNewUnitData}
+          handleSaveUnit={handleSaveUnit}
+          handleAddHistory={handleAddHistory}
+          isNewUnit={isNewUnit}
+          appData={appData}
+          setEditingUnitId={setEditingUnitId}
+          setIsNewUnit={setIsNewUnit}
+        />
+      );
+    }
 
     return (
-      <div className="bg-white p-8 rounded-2xl shadow-2xl space-y-8 max-w-5xl mx-auto my-6 border border-slate-200">
-        <div className="flex justify-between items-center border-b pb-6">
-          <h3 className="text-2xl font-extrabold text-slate-800">
-            {isNewUnit ? '新增進攻對象' : `編輯/紀錄: ${newUnitData.name}`}
-          </h3>
-          <button onClick={() => { setEditingUnitId(null); setIsNewUnit(false); }} className="text-gray-400 hover:text-gray-600">
-            <X className="w-6 h-6" />
-          </button>
+      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        <div className="flex items-center space-x-3 mb-6">
+          <Edit className="w-8 h-8 text-indigo-600" />
+          <h2 className="text-3xl font-extrabold text-slate-800">
+            拜訪行為紀錄
+          </h2>
         </div>
 
-        {/* Section 1: Basic Unit Info */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <InputGroup label="單位名稱 (必填)">
-            <input
-              type="text"
-              value={newUnitData.name || ''}
-              onChange={(e) => setNewUnitData((p) => ({ ...p, name: e.target.value }))}
-              className={styles.formInput}
-            />
-          </InputGroup>
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100 flex flex-wrap gap-4 items-center">
+          <FilterSelect
+            label="類型篩選"
+            value={recordFilter.type}
+            onChange={(e) =>
+              setRecordFilter((p) => ({ ...p, type: e.target.value }))
+            }
+          >
+            <option value="">全部類型</option>
+            <option value="Administrative">行政</option>
+            <option value="Academic">學術</option>
+          </FilterSelect>
+          <FilterSelect
+            label="區域篩選"
+            value={recordFilter.area}
+            onChange={(e) =>
+              setRecordFilter((p) => ({ ...p, area: e.target.value }))
+            }
+          >
+            <option value="">全部區域</option>
+            {appData.settings.areaMap.map((a) => (
+              <option key={a.code} value={a.code}>
+                {a.code}
+              </option>
+            ))}
+          </FilterSelect>
 
-          <InputGroup label="棟別代號 (必填)">
-            <select
-              value={newUnitData.buildingId || ''}
-              onChange={(e) => setNewUnitData((p) => ({ ...p, buildingId: e.target.value }))}
-              className={styles.formSelect}
-            >
-              <option value="">選擇棟別</option>
-              {appData.settings.buildings.map((b) => (
-                <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
-              ))}
-            </select>
-          </InputGroup>
+          <div className="flex-grow"></div>
 
-          <div className="grid grid-cols-2 gap-2">
-             <InputGroup label="樓層">
-                <input
-                type="text"
-                value={newUnitData.floor || ''}
-                onChange={(e) => setNewUnitData((p) => ({ ...p, floor: e.target.value }))}
-                className={styles.formInput}
-                placeholder="e.g. 3F"
-                />
-            </InputGroup>
-            <InputGroup label="科室別(房號)">
-                <input
-                type="text"
-                value={newUnitData.roomNumber || ''}
-                onChange={(e) => setNewUnitData((p) => ({ ...p, roomNumber: e.target.value }))}
-                className={styles.formInput}
-                placeholder="e.g. 302室"
-                />
-            </InputGroup>
-          </div>
-
-          <div className="col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
-             <div>
-                <InputGroup label="承辦 1 (主要)">
-                    <div className="flex gap-1 mb-1">
-                        <User className="w-4 h-4 text-gray-400 mt-3"/>
-                        <input type="text" value={newUnitData.contactName1 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactName1: e.target.value}))} className={styles.formInput} placeholder="姓名" />
-                    </div>
-                    <div className="flex gap-1">
-                        <Phone className="w-4 h-4 text-gray-400 mt-3"/>
-                        <input type="text" value={newUnitData.contactPhone1 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone1: e.target.value}))} className={styles.formInput} placeholder="電話" />
-                    </div>
-                </InputGroup>
-             </div>
-             <div>
-                <InputGroup label="承辦 2">
-                    <div className="flex gap-1 mb-1">
-                        <User className="w-4 h-4 text-gray-400 mt-3"/>
-                        <input type="text" value={newUnitData.contactName2 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactName2: e.target.value}))} className={styles.formInput} placeholder="姓名" />
-                    </div>
-                    <div className="flex gap-1">
-                        <Phone className="w-4 h-4 text-gray-400 mt-3"/>
-                        <input type="text" value={newUnitData.contactPhone2 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone2: e.target.value}))} className={styles.formInput} placeholder="電話" />
-                    </div>
-                </InputGroup>
-             </div>
-             <div>
-                <InputGroup label="承辦 3">
-                    <div className="flex gap-1 mb-1">
-                        <User className="w-4 h-4 text-gray-400 mt-3"/>
-                        <input type="text" value={newUnitData.contactName3 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactName3: e.target.value}))} className={styles.formInput} placeholder="姓名" />
-                    </div>
-                    <div className="flex gap-1">
-                        <Phone className="w-4 h-4 text-gray-400 mt-3"/>
-                        <input type="text" value={newUnitData.contactPhone3 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone3: e.target.value}))} className={styles.formInput} placeholder="電話" />
-                    </div>
-                </InputGroup>
-             </div>
-          </div>
-
-          <InputGroup label="獨立空間分組">
-              <select
-                value={newUnitData.subgroup || ''}
-                onChange={(e) => setNewUnitData((p) => ({ ...p, subgroup: e.target.value }))}
-                className={styles.formSelect}
-              >
-                <option value="">一般</option>
-                <option value="獨立空間">獨立空間</option>
-              </select>
-          </InputGroup>
-
-          <InputGroup label="進攻狀態">
-            <select
-              value={newUnitData.attackStatus || 'engaged'}
-              onChange={(e) => setNewUnitData((p) => ({ ...p, attackStatus: e.target.value }))}
-              className={styles.formSelect}
-            >
-              <option value="engaged">進攻中</option>
-              <option value="settled_non_client">已進攻暫定結案</option>
-              <option value="client">本牌客戶</option>
-            </select>
-          </InputGroup>
-
-          <InputGroup label="單位類別">
-            <select
-              value={newUnitData.category || 'Academic'}
-              onChange={(e) => setNewUnitData((p) => ({ ...p, category: e.target.value }))}
-              className={styles.formSelect}
-            >
-              <option value="Academic">學術單位</option>
-              <option value="Administrative">行政單位</option>
-            </select>
-          </InputGroup>
-        </div>
-
-        <div className="border-t border-slate-100 my-6"></div>
-
-        {/* Section 2: Equipment & Characteristics */}
-        <div className="grid grid-cols-1 gap-8">
-          <div className="bg-indigo-50/50 p-6 rounded-xl border border-indigo-100">
-            <h4 className="text-lg font-bold mb-4 text-indigo-800 flex items-center">
-              <Printer className="w-5 h-5 mr-2" />
-              設備清單 ({equipment?.length || 0})
-            </h4>
-            <EquipmentAdder
-              availableBrands={availableBrands}
-              availableModels={availableModels}
-              machineTypes={appData.settings.machineTypes}
-              equipmentDB={appData.settings.equipmentDB}
-              onAdd={(eq) =>
-                setNewUnitData((p) => ({
-                  ...p,
-                  equipment: [
-                    ...p.equipment,
-                    { ...eq, id: crypto.randomUUID() },
-                  ],
-                }))
-              }
-              equipmentSearch={equipmentSearch}
-              setEquipmentSearch={setEquipmentSearch}
-            />
-            {/* Show Equipment List with History */}
-            <div className="space-y-4 mt-6">
-                {(equipment || []).map((eq) => (
-                    <div key={eq.id} className="bg-white border border-indigo-100 rounded-xl shadow-sm p-4">
-                        <div className="flex justify-between items-start mb-2">
-                            <div>
-                                <span className="text-lg font-bold text-slate-800 flex items-center">
-                                    {eq.brand} {eq.model}
-                                    <span className="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{eq.type}</span>
-                                </span>
-                                <div className="text-sm text-slate-600 mt-1 space-y-1">
-                                    <p>方案: <span className="font-semibold">{eq.plan || '未指定'}</span></p>
-                                    <p>廠商: <span className="font-semibold">{eq.vendor || '未指定'}</span></p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setNewUnitData((p) => ({ ...p, equipment: p.equipment.filter((e) => e.id !== eq.id) }))}
-                                className="text-gray-300 hover:text-red-500 transition p-1"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        
-                        {/* Inline Read-Only History for this Machine */}
-                        <div className="mt-3 pt-3 border-t border-gray-100">
-                            <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
-                                <History className="w-3 h-3 mr-1"/> 最近拜訪紀錄 (本機台)
-                            </h5>
-                            <div className="space-y-1">
-                                {history
-                                    ?.filter(h => h.relatedEquipmentId === eq.id)
-                                    .sort((a, b) => new Date(b.date) - new Date(a.date))
-                                    .slice(0, 10)
-                                    .map(log => (
-                                        <div key={log.id} className="text-xs flex justify-between text-slate-600 bg-slate-50 px-2 py-1 rounded">
-                                            <span>{log.date}</span>
-                                            <span className="font-medium truncate max-w-[200px]">{log.activity}</span>
-                                        </div>
-                                    ))
-                                }
-                                {(!history?.some(h => h.relatedEquipmentId === eq.id)) && (
-                                    <p className="text-xs text-gray-300 italic">尚無針對此機台的紀錄</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-          </div>
-          
-          <div className="space-y-6">
-             {/* Characteristics */}
-             <div className="bg-amber-50/50 p-6 rounded-xl border border-amber-100">
-                <h4 className="text-lg font-bold mb-4 text-amber-800 flex items-center">
-                <Target className="w-5 h-5 mr-2" />
-                客戶特性
-                </h4>
-                <CharacteristicsEditor
-                characteristics={characteristics}
-                setNewUnitData={setNewUnitData}
-                />
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-100 my-6"></div>
-
-        {/* Section 3: Visit Log Input (Keep Write Access Here) */}
-        <div className="bg-emerald-50/30 p-6 rounded-xl border border-emerald-100">
-          <h4 className="text-lg font-bold mb-4 text-emerald-800 flex items-center">
-            <Edit className="w-5 h-5 mr-2" />
-            新增拜訪紀錄 (寫入)
-          </h4>
-          <HistoryLogAdder 
-            onAdd={handleAddHistory} 
-            equipmentList={equipment} // Pass equipment list to allow selection
-          />
-          
-          {/* General History List (Non-machine specific or All) */}
-          <div className="mt-6">
-             <h5 className="text-sm font-bold text-slate-500 mb-2">一般/其他拜訪紀錄 (最近10筆)</h5>
-             <div className="space-y-2">
-                {history
-                    ?.filter(h => !h.relatedEquipmentId) // Show logs not tied to specific machines here
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))
-                    .slice(0, 10)
-                    .map(log => (
-                        <div key={log.id} className="text-sm border-b border-emerald-100 pb-2 last:border-0 bg-white/50 p-2 rounded">
-                            <div className="flex justify-between font-medium text-slate-700">
-                                <span>{log.date}</span>
-                                <span>{log.activity}</span>
-                            </div>
-                            {(log.promotionalItems?.length > 0 || log.characteristicSupplement) && (
-                                <div className="text-xs text-slate-500 mt-1 pl-2 border-l-2 border-slate-300">
-                                    {log.promotionalItems?.map(i => `${i.item} x${i.quantity}`).join(', ')}
-                                    {log.characteristicSupplement && ` ${log.characteristicSupplement}`}
-                                </div>
-                            )}
-                        </div>
-                    ))
-                }
-             </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end space-x-4 pt-6">
           <button
             onClick={() => {
               setEditingUnitId(null);
-              setIsNewUnit(false);
+              setIsNewUnit(true);
             }}
-            className="px-6 py-2.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition font-medium"
+            className={styles.btnPrimary}
           >
-            取消
+            <Plus className="w-4 h-4 mr-1" /> 新增對象
           </button>
-          <button
-            onClick={handleSaveUnit}
-            className={`${styles.btnPrimary} bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-2.5 hover:shadow-indigo-500/30 hover:-translate-y-0.5`}
-          >
-            <Save className="w-5 h-5 mr-2" /> 儲存資料
+          <button onClick={exportRecordUnits} className={styles.btnInfo}>
+            <Download className="w-4 h-4 mr-1" /> 匯出
           </button>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 p-4">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  {unitTableHeaders.map((h) => (
+                    <th
+                      key={h.key}
+                      className="p-3 text-left text-xs font-bold uppercase tracking-wider"
+                    >
+                      {h.label}
+                    </th>
+                  ))}
+                  <th className="p-3 text-right text-xs font-bold uppercase tracking-wider">
+                    動作
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {unitsList.map((unit) => (
+                  <tr key={unit.id} className="hover:bg-indigo-50/50">
+                    <td className="p-3 text-sm text-gray-700">
+                      {unit.category}
+                    </td>
+                    <td className="p-3 text-sm text-gray-700">
+                      {unit.areaCode || '-'}
+                    </td>
+                    <td className="p-3 text-sm font-medium text-gray-900">
+                      {unit.name}
+                    </td>
+                    <td className="p-3 text-sm text-gray-600">
+                      {unit.contactName}
+                    </td>
+                    <td className="p-3 text-sm text-gray-600">
+                      {unit.contactPhone}
+                    </td>
+                    <td className="p-3 text-sm">
+                      <span
+                        className={`px-2 py-0.5 inline-flex text-xs leading-5 font-bold rounded-full ${
+                          unit.attackStatus === 'client'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : unit.attackStatus === 'settled_non_client'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {unit.attackStatus === 'client'
+                          ? '本牌客戶'
+                          : unit.attackStatus === 'settled_non_client'
+                          ? '暫定結案'
+                          : '進攻中'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right">
+                      <button
+                        onClick={() => setEditingUnitId(unit.id)}
+                        className={`${styles.btnPrimary} py-1.5 px-3 text-xs`}
+                      >
+                        任務/編輯
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {unitsList.length === 0 && (
+              <p className="text-center text-gray-400 py-8">
+                無符合篩選條件的客戶。
+              </p>
+            )}
+          </div>
         </div>
       </div>
     );
   };
 
-  const EquipmentAdder = ({
-    availableBrands,
-    availableModels,
-    machineTypes,
-    equipmentDB,
-    onAdd,
-    equipmentSearch,
-    setEquipmentSearch,
-  }) => {
-    const [newEq, setNewEq] = useState({ brand: '', model: '', type: '', plan: '租賃', vendor: '' });
-    const handleAdd = () => {
-      if (newEq.brand && newEq.model && newEq.type) {
-        onAdd(newEq);
-        setNewEq({ brand: '', model: '', type: '', plan: '租賃', vendor: '' });
-        setEquipmentSearch({ brand: '', model: '' });
-      } else {
-        alert('請填寫完整的設備資訊。');
-      }
-    };
-
-    useEffect(() => {
-      const match = equipmentDB.find(
-        (e) => e.brand === newEq.brand && e.model === newEq.model
-      );
-      if (match && newEq.type === '') {
-        setNewEq((p) => ({ ...p, type: match.type }));
-      }
-    }, [newEq.brand, newEq.model, equipmentDB]);
-
-    return (
-      <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <select
-            value={newEq.brand}
-            onChange={(e) => {
-              setNewEq((p) => ({ ...p, brand: e.target.value, model: '' }));
-              setEquipmentSearch((p) => ({ ...p, brand: e.target.value }));
-            }}
-            className={`${styles.formSelect} flex-1`}
-          >
-            <option value="">選擇廠牌</option>
-            {availableBrands.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={newEq.model}
-            onChange={(e) => setNewEq((p) => ({ ...p, model: e.target.value }))}
-            className={`${styles.formSelect} flex-1`}
-          >
-            <option value="">選擇型號</option>
-            {availableModels.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={newEq.type}
-            onChange={(e) => setNewEq((p) => ({ ...p, type: e.target.value }))}
-            className={`${styles.formSelect} flex-1`}
-          >
-            <option value="">選擇類型</option>
-            {machineTypes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select
-            value={newEq.plan}
-            onChange={(e) => setNewEq(p => ({...p, plan: e.target.value}))}
-            className={`${styles.formSelect} flex-1`}
-          >
-             <option value="租賃">租賃</option>
-             <option value="買斷">買斷</option>
-             <option value="買斷(維護合約)">買斷(維護合約)</option>
-             <option value="借用">借用</option>
-          </select>
-        </div>
-        <div className="flex gap-2">
-            <input 
-                type="text" 
-                value={newEq.vendor} 
-                onChange={(e) => setNewEq(p => ({...p, vendor: e.target.value}))}
-                className={`${styles.formInput} flex-grow`} 
-                placeholder="配合廠商"
-            />
-            <button
-                onClick={handleAdd}
-                className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-            >
-                <Plus className="w-5 h-5" />
-            </button>
-        </div>
-      </div>
-    );
-  };
-
-  const EquipmentList = ({ equipment, setNewUnitData }) => (
-      // This logic is now moved directly into UnitRecordView to support inline history display context
-      // Keeping this empty function to avoid breakages if referenced elsewhere, though logically deprecated
-      <></>
-  );
-
-  const CharacteristicsEditor = ({ characteristics, setNewUnitData }) => {
-    const [newChar, setNewChar] = useState('');
-    const handleAdd = () => {
-      if (newChar) {
-        setNewUnitData((p) => ({
-          ...p,
-          characteristics: [...p.characteristics, newChar],
-        }));
-        setNewChar('');
-      }
-    };
-    const handleDelete = (char) => {
-      setNewUnitData((p) => ({
-        ...p,
-        characteristics: p.characteristics.filter((c) => c !== char),
-      }));
-    };
-
-    return (
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newChar}
-            onChange={(e) => setNewChar(e.target.value)}
-            className={`${styles.formInput} flex-grow`}
-            placeholder="e.g. 預算緊張"
-          />
-          <button
-            onClick={handleAdd}
-            className="p-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(characteristics || []).map((char, index) => (
-            <span
-              key={index}
-              className="flex items-center bg-white border border-amber-200 text-amber-800 text-sm px-3 py-1 rounded-full shadow-sm"
-            >
-              {char}
-              <button
-                onClick={() => handleDelete(char)}
-                className="ml-2 text-amber-400 hover:text-amber-600"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const HistoryLogAdder = ({ onAdd, equipmentList }) => {
-    const [newLog, setNewLog] = useState({
-      activity: '',
-      item: '',
-      quantity: 1,
-      supplement: '',
-      relatedEquipmentId: '' // New Field for linking
+  // --- Tab 5: 參數設定 ---
+  const Tab5Settings = () => {
+    const [newBuilding, setNewBuilding] = useState({ name: '', code: '' });
+    const [newEquipment, setNewEquipment] = useState({
+      brand: '',
+      model: '',
+      type: '',
     });
 
-    const handleAdd = () => {
-      if (newLog.activity) {
-        onAdd({
-          activity: newLog.activity,
-          promotionalItems: newLog.item
-            ? [{ item: newLog.item, quantity: newLog.quantity }]
-            : [],
-          characteristicSupplement: newLog.supplement,
-          relatedEquipmentId: newLog.relatedEquipmentId
-        });
-        setNewLog({ activity: '', item: '', quantity: 1, supplement: '', relatedEquipmentId: '' });
-      } else {
-        alert('請填寫實際行為。');
+    const handleUpdateSettings = async (field, value) => {
+      await updatePrivateData({ [field]: value });
+    };
+
+    const handleAddBuilding = () => {
+      if (newBuilding.name && newBuilding.code) {
+        const updatedBuildings = [...appData.settings.buildings, newBuilding];
+        handleUpdateSettings('buildings', updatedBuildings);
+        setNewBuilding({ name: '', code: '' });
       }
     };
 
+    const handleDeleteBuilding = (code) => {
+      const updatedBuildings = appData.settings.buildings.filter(
+        (b) => b.code !== code
+      );
+      handleUpdateSettings('buildings', updatedBuildings);
+    };
+
+    const handleAddEquipmentDB = () => {
+      if (newEquipment.brand && newEquipment.model && newEquipment.type) {
+        const updatedDB = [...appData.settings.equipmentDB, newEquipment];
+        handleUpdateSettings('equipmentDB', updatedDB);
+
+        if (!appData.settings.machineTypes.includes(newEquipment.type)) {
+          handleUpdateSettings('machineTypes', [
+            ...appData.settings.machineTypes,
+            newEquipment.type,
+          ]);
+        }
+        setNewEquipment({ brand: '', model: '', type: '' });
+      }
+    };
+
+    const handleDeleteEquipmentDB = (brand, model) => {
+      const updatedDB = appData.settings.equipmentDB.filter(
+        (e) => !(e.brand === brand && e.model === model)
+      );
+      handleUpdateSettings('equipmentDB', updatedDB);
+    };
+
     return (
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select 
-                value={newLog.relatedEquipmentId} 
-                onChange={(e) => setNewLog(p => ({...p, relatedEquipmentId: e.target.value}))}
-                className={styles.formSelect}
+      <div className="space-y-8 p-6 max-w-7xl mx-auto">
+        <div className="flex items-center space-x-3 mb-6">
+          <Edit className="w-8 h-8 text-indigo-600" />
+          <h2 className="text-3xl font-extrabold text-slate-800">參數設定</h2>
+        </div>
+
+        {/* 1. 棟別/校區名稱設定 */}
+        <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
+          <h3 className="text-xl font-bold mb-6 text-slate-800 border-b pb-2 flex items-center">
+            <Building className="w-5 h-5 mr-2 text-indigo-500" /> 棟別設定
+          </h3>
+          <div className="flex flex-wrap gap-3 mb-6 bg-slate-50 p-4 rounded-xl">
+            <input
+              type="text"
+              value={newBuilding.name}
+              onChange={(e) =>
+                setNewBuilding((p) => ({ ...p, name: e.target.value }))
+              }
+              className={`${styles.formInput} flex-grow`}
+              placeholder="名稱 (e.g. 行政大樓)"
+            />
+            <input
+              type="text"
+              value={newBuilding.code}
+              onChange={(e) =>
+                setNewBuilding((p) => ({ ...p, code: e.target.value }))
+              }
+              className={`${styles.formInput} w-24`}
+              placeholder="代號"
+            />
+            <button
+              onClick={handleAddBuilding}
+              className={styles.btnPrimary}
             >
-                <option value="">一般紀錄 (不指定機台)</option>
-                {equipmentList?.map(eq => (
-                    <option key={eq.id} value={eq.id}>
-                        針對: {eq.brand} {eq.model}
-                    </option>
-                ))}
+              <Plus className="w-4 h-4 mr-1" /> 新增
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {appData.settings.buildings.map((b) => (
+              <div
+                key={b.code}
+                className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-indigo-300 transition"
+              >
+                <p className="text-slate-700 font-medium">
+                  {b.name}{' '}
+                  <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">
+                    {b.code}
+                  </span>
+                </p>
+                <button
+                  onClick={() => handleDeleteBuilding(b.code)}
+                  className="text-slate-400 hover:text-red-500 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 2. 設備資料庫設定 */}
+        <div className="bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
+          <h3 className="text-xl font-bold mb-6 text-slate-800 border-b pb-2 flex items-center">
+            <Activity className="w-5 h-5 mr-2 text-indigo-500" /> 設備資料庫
+          </h3>
+          <div className="flex flex-wrap gap-3 mb-6 bg-slate-50 p-4 rounded-xl">
+            <select
+              value={newEquipment.type}
+              onChange={(e) =>
+                setNewEquipment((p) => ({ ...p, type: e.target.value }))
+              }
+              className={`${styles.formSelect} flex-1 min-w-[150px]`}
+            >
+              <option value="">選擇類型</option>
+              {appData.settings.machineTypes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
             </select>
             <input
-            type="text"
-            value={newLog.activity}
-            onChange={(e) =>
-                setNewLog((p) => ({ ...p, activity: e.target.value }))
-            }
-            className={`${styles.formInput} font-medium`}
-            placeholder="行為紀錄 (e.g. 設備demo)"
+              type="text"
+              value={newEquipment.brand}
+              onChange={(e) =>
+                setNewEquipment((p) => ({ ...p, brand: e.target.value }))
+              }
+              className={`${styles.formInput} flex-1 min-w-[120px]`}
+              placeholder="廠牌"
             />
+            <input
+              type="text"
+              value={newEquipment.model}
+              onChange={(e) =>
+                setNewEquipment((p) => ({ ...p, model: e.target.value }))
+              }
+              className={`${styles.formInput} flex-1 min-w-[120px]`}
+              placeholder="型號"
+            />
+            <button
+              onClick={handleAddEquipmentDB}
+              className={styles.btnPrimary}
+            >
+              <Plus className="w-4 h-4 mr-1" /> 新增
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+            {appData.settings.equipmentDB.map((e, index) => (
+              <div
+                key={index}
+                className="flex justify-between items-center p-3 bg-white border border-slate-200 rounded-lg shadow-sm"
+              >
+                <div>
+                  <span className="font-bold text-slate-800">
+                    {e.brand} {e.model}
+                  </span>
+                  <span className="block text-xs text-slate-500">{e.type}</span>
+                </div>
+                <button
+                  onClick={() => handleDeleteEquipmentDB(e.brand, e.model)}
+                  className="text-slate-400 hover:text-red-500 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-        
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newLog.item}
-            onChange={(e) => setNewLog((p) => ({ ...p, item: e.target.value }))}
-            className={`${styles.formInput} flex-grow`}
-            placeholder="輔銷物"
-          />
-          <input
-            type="number"
-            value={newLog.quantity}
-            onChange={(e) =>
-              setNewLog((p) => ({
-                ...p,
-                quantity: parseInt(e.target.value) || 1,
-              }))
-            }
-            className={`${styles.formInput} w-20 text-center`}
-            min="1"
-          />
-        </div>
-        <textarea
-          value={newLog.supplement}
-          onChange={(e) =>
-            setNewLog((p) => ({ ...p, supplement: e.target.value }))
-          }
-          className={`${styles.formTextarea} text-sm`}
-          placeholder="補充說明..."
-          rows="2"
-        ></textarea>
-        <button
-          onClick={handleAdd}
-          className="w-full py-2 bg-emerald-50 text-emerald-700 font-bold rounded-lg hover:bg-emerald-100 transition"
-        >
-          <Plus className="w-4 h-4 mr-1 inline" /> 加入紀錄
-        </button>
       </div>
     );
   };
-
-  const HistoryLogList = ({ history }) => (
-      // Deprecated in favor of inline lists inside UnitRecordView
-      <></>
-  );
 
   const renderTabContent = () => {
     switch (currentTab) {
