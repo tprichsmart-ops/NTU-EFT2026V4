@@ -1630,7 +1630,6 @@ const App = () => {
       isDrawing: false,
       start: null,
       current: null,
-      areaCodeInput: '',
       uploadedFile: null,
     });
 
@@ -1662,8 +1661,7 @@ const App = () => {
         }
         
         // Confirm naming
-        let code = mapState.areaCodeInput;
-        const confirmedName = window.prompt("請確認或輸入區域代號", code);
+        const confirmedName = window.prompt("請為此區域命名 (區域編號)", "");
         
         if (confirmedName === null) return; // Cancelled
         if (!confirmedName.trim()) {
@@ -1682,7 +1680,7 @@ const App = () => {
         updatePrivateData({ areaMap: [...areaMap, newArea] });
         
         // Reset state
-        setMapState(p => ({ ...p, isDrawing: false, areaCodeInput: '' }));
+        setMapState(p => ({ ...p, isDrawing: false }));
         setPolyPoints([]);
     };
 
@@ -1925,8 +1923,7 @@ const App = () => {
                     onClick={() =>
                       setMapState((p) => ({
                         ...p,
-                        isDrawing: true,
-                        areaCodeInput: ''
+                        isDrawing: true
                       }))
                     }
                     className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent bg-indigo-600 hover:bg-indigo-500 text-white`}
@@ -2015,10 +2012,10 @@ const App = () => {
                                 <g key={area.id} className="group/area pointer-events-auto cursor-pointer">
                                     <polygon
                                         points={pointsStr}
-                                        fill="rgba(255, 0, 0, 0.3)" // Keep or slightly increase opacity
+                                        fill="rgba(255, 0, 0, 0.3)" 
                                         stroke="red"
-                                        strokeWidth="0.5" // 0.5% of width
-                                        // Removed vectorEffect
+                                        strokeWidth="0.5" // use smaller width as viewBox is 100x100
+                                        vectorEffect="non-scaling-stroke"
                                         className="transition-all hover:fill-red-500/50"
                                     />
                                 </g>
@@ -2033,7 +2030,8 @@ const App = () => {
                                     fill="none"
                                     stroke="red"
                                     strokeWidth="0.5"
-                                    // Removed vectorEffect
+                                    strokeDasharray="1 1" // smaller dash for viewBox scale
+                                    vectorEffect="non-scaling-stroke"
                                 />
                                 {polyPoints.map((p, i) => (
                                     <circle cx={p.x} cy={p.y} r="0.5" fill="white" stroke="red" strokeWidth="0.1" key={i} />
