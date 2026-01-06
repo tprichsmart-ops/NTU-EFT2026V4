@@ -2106,14 +2106,19 @@ const App = () => {
                             return (
                                 <div 
                                     key={area.id}
-                                    style={{ left: `${centerX}%`, top: `${centerY}%` }}
-                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 group/label flex flex-col items-center ${mapState.isDrawing ? 'opacity-30' : ''}`}
+                                    style={{ 
+                                        left: `${centerX}%`, 
+                                        top: `${centerY}%`,
+                                        // Counter-scale to keep label size constant regardless of map zoom
+                                        transform: `translate(-50%, -50%) scale(${1 / zoom})` 
+                                    }}
+                                    className={`absolute flex flex-col items-center z-50 ${mapState.isDrawing ? 'opacity-30' : ''}`}
                                 >
-                                     <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap border border-white pointer-events-auto">
+                                     <span className="bg-red-600 text-white text-xs px-2 py-1 rounded shadow-lg font-bold whitespace-nowrap border border-white pointer-events-auto">
                                         {area.code} {unitInArea > 0 && `(${unitInArea})`}
                                      </span>
                                      <button
-                                        className="mt-0.5 p-0.5 bg-white text-red-600 rounded-full shadow-md opacity-0 group-hover/label:opacity-100 transition transform hover:scale-110 border border-red-100 cursor-pointer pointer-events-auto"
+                                        className="mt-1 p-1 bg-white text-red-600 rounded-full shadow-md hover:bg-red-50 transition border border-red-100 cursor-pointer pointer-events-auto"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             if(window.confirm(`確定要刪除區域 ${area.code} 嗎？`)) {
@@ -2127,7 +2132,7 @@ const App = () => {
                                         }}
                                         title="刪除區域"
                                     >
-                                        <X className="w-3 h-3" />
+                                        <X className="w-4 h-4" />
                                     </button>
                                 </div>
                             );
