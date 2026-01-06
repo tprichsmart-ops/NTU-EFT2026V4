@@ -1953,6 +1953,7 @@ const App = () => {
                 <img 
                   src={uploadedMapUrl} 
                   alt="Campus Map" 
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover transition-transform duration-500 ease-out"
                   onError={(e) => {
                     e.target.onerror = null; 
