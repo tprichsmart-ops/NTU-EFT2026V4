@@ -1634,7 +1634,7 @@ const App = () => {
       uploadedFile: null,
     });
 
-    const [zoom, setZoom] = useState(0.6); // Default zoom 60%
+    const [zoom, setZoom] = useState(0.4); // Default zoom 40%
     const [polyPoints, setPolyPoints] = useState([]);
 
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 5));
@@ -1920,26 +1920,13 @@ const App = () => {
                </div>
 
                {/* Controls */}
-               <input
-                type="text"
-                value={mapState.areaCodeInput}
-                onChange={(e) =>
-                  setMapState((p) => ({
-                    ...p,
-                    areaCodeInput: e.target.value,
-                  }))
-                }
-                className={`${styles.formInput} w-24 bg-slate-700 border-slate-600 text-white placeholder-slate-400 focus:ring-slate-500`}
-                placeholder="輸入區號"
-                // REMOVE DISABLED: Let user type code anytime
-              />
               {!mapState.isDrawing ? (
                   <button
                     onClick={() =>
                       setMapState((p) => ({
                         ...p,
                         isDrawing: true,
-                        areaCodeInput: p.areaCodeInput || ''
+                        areaCodeInput: ''
                       }))
                     }
                     className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent bg-indigo-600 hover:bg-indigo-500 text-white`}
@@ -2028,10 +2015,10 @@ const App = () => {
                                 <g key={area.id} className="group/area pointer-events-auto cursor-pointer">
                                     <polygon
                                         points={pointsStr}
-                                        fill="rgba(255, 0, 0, 0.3)" 
+                                        fill="rgba(255, 0, 0, 0.3)" // Keep or slightly increase opacity
                                         stroke="red"
-                                        strokeWidth="0.5" // use smaller width as viewBox is 100x100
-                                        vectorEffect="non-scaling-stroke"
+                                        strokeWidth="0.5" // 0.5% of width
+                                        // Removed vectorEffect
                                         className="transition-all hover:fill-red-500/50"
                                     />
                                 </g>
@@ -2046,8 +2033,7 @@ const App = () => {
                                     fill="none"
                                     stroke="red"
                                     strokeWidth="0.5"
-                                    strokeDasharray="1 1" // smaller dash for viewBox scale
-                                    vectorEffect="non-scaling-stroke"
+                                    // Removed vectorEffect
                                 />
                                 {polyPoints.map((p, i) => (
                                     <circle cx={p.x} cy={p.y} r="0.5" fill="white" stroke="red" strokeWidth="0.1" key={i} />
