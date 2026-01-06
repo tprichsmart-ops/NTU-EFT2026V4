@@ -42,7 +42,10 @@ import {
   UploadCloud,
   FileUp,
   AlertCircle,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ZoomIn,
+  ZoomOut,
+  Undo
 } from 'lucide-react';
 
 // --- Global Firebase Configuration and Utility Functions ---
@@ -1631,59 +1634,66 @@ const App = () => {
       uploadedFile: null,
     });
 
+    const [zoom, setZoom] = useState(1);
+    const [polyPoints, setPolyPoints] = useState([]);
+
+    const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.2, 5));
+    const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.2, 0.5));
+
     const handleMapClick = (e) => {
+        if (!mapState.isDrawing) return;
+
         const rect = e.currentTarget.getBoundingClientRect();
+        // Since we are clicking on the element that is scaled, the e.clientX/Y relative to the rect should be correct for the element's current visual state.
+        // However, we want percentage coordinates relative to the *original unscaled* content size if possible, or just relative to the current box.
+        // SVG percentage coordinates are relative to the bounding box of the SVG.
+        // The bounding client rect of the target (the div containing image and svg) already accounts for scale.
+        
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
   
-        if (!mapState.isDrawing) {
-          setMapState((p) => ({
-            ...p,
-            isDrawing: true,
-            start: { x, y },
-            current: { x, y },
-          }));
-        } else {
-          const { start, areaCodeInput } = mapState;
-          if (!areaCodeInput) {
-            alert('請輸入區域代表編號。');
-            setMapState((p) => ({
-              ...p,
-              isDrawing: false,
-              start: null,
-              current: null,
-            }));
+        setPolyPoints(prev => [...prev, {x, y}]);
+    };
+
+    const handleUndoPoint = () => {
+        setPolyPoints(prev => prev.slice(0, -1));
+    };
+
+    const handleFinishDrawing = () => {
+        if (polyPoints.length < 3) {
+            alert('請至少標記 3 個點以形成區域');
             return;
-          }
-  
-          const newArea = {
-            id: crypto.randomUUID(),
-            code: areaCodeInput,
-            x1: Math.min(start.x, x),
-            y1: Math.min(start.y, y),
-            x2: Math.max(start.x, x),
-            y2: Math.max(start.y, y),
-            unitCount: 0,
-          };
-  
-          updatePrivateData({ areaMap: [...areaMap, newArea] });
-          setMapState((p) => ({
-            ...p,
-            isDrawing: false,
-            start: null,
-            current: null,
-            areaCodeInput: '',
-          }));
         }
-      };
+        
+        // Confirm naming
+        let code = mapState.areaCodeInput;
+        const confirmedName = window.prompt("請確認或輸入區域代號", code);
+        
+        if (confirmedName === null) return; // Cancelled
+        if (!confirmedName.trim()) {
+            alert("區域代號不能為空");
+            return;
+        }
+
+        const newArea = {
+            id: crypto.randomUUID(),
+            code: confirmedName,
+            type: 'polygon',
+            points: polyPoints,
+            unitCount: 0 
+        };
+
+        updatePrivateData({ areaMap: [...areaMap, newArea] });
+        
+        // Reset state
+        setMapState(p => ({ ...p, isDrawing: false, areaCodeInput: '' }));
+        setPolyPoints([]);
+    };
 
     const handleMouseMove = (e) => {
         if (!mapState.isDrawing) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-        setMapState((p) => ({ ...p, current: { x, y } }));
-      };
+        // Optional: Implement rubber-banding line to mouse cursor
+    };
 
     const deleteSelectedUnits = () => {
       if (
@@ -1901,12 +1911,18 @@ const App = () => {
         </div>
 
         {/* Map Section */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-          <div className="p-5 bg-slate-800 text-white flex justify-between items-center">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col h-[800px]">
+          <div className="p-5 bg-slate-800 text-white flex justify-between items-center flex-shrink-0 z-10 shadow-md">
             <h3 className="text-xl font-bold flex items-center">
               <MapPin className="w-5 h-5 mr-2" /> 校園地圖戰情室
             </h3>
-            <div className="flex space-x-2 items-center">
+            <div className="flex space-x-3 items-center">
+               <div className="flex items-center bg-slate-700 rounded-lg p-1 border border-slate-600">
+                  <button onClick={handleZoomOut} className="p-1.5 hover:bg-slate-600 rounded text-white"><ZoomOut className="w-4 h-4"/></button>
+                  <span className="text-xs font-mono w-12 text-center">{Math.round(zoom * 100)}%</span>
+                  <button onClick={handleZoomIn} className="p-1.5 hover:bg-slate-600 rounded text-white"><ZoomIn className="w-4 h-4"/></button>
+               </div>
+
                {/* Controls */}
                <input
                 type="text"
@@ -1921,93 +1937,168 @@ const App = () => {
                 placeholder="輸入區號"
                 disabled={mapState.isDrawing}
               />
-              <button
-                onClick={() =>
-                  setMapState((p) => ({
-                    ...p,
-                    isDrawing: !p.isDrawing,
-                    start: null,
-                    current: null,
-                  }))
-                }
-                className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent ${
-                  mapState.isDrawing
-                    ? 'bg-rose-500 text-white hover:bg-rose-600'
-                    : 'bg-slate-600 text-white hover:bg-slate-500'
-                }`}
-                disabled={!uploadedMapUrl}
-              >
-                {mapState.isDrawing ? '點擊結束' : '圈選區域'}
-              </button>
+              {!mapState.isDrawing ? (
+                  <button
+                    onClick={() =>
+                      setMapState((p) => ({
+                        ...p,
+                        isDrawing: true,
+                        areaCodeInput: p.areaCodeInput || ''
+                      }))
+                    }
+                    className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent bg-indigo-600 hover:bg-indigo-500 text-white`}
+                    disabled={!uploadedMapUrl}
+                  >
+                    <Edit className="w-4 h-4 mr-2"/> 開始圈選
+                  </button>
+              ) : (
+                  <>
+                    <button
+                        onClick={handleUndoPoint}
+                        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition"
+                        title="復原上一點"
+                    >
+                        <Undo className="w-4 h-4"/>
+                    </button>
+                    <button
+                        onClick={() => {
+                            setMapState(p => ({...p, isDrawing: false}));
+                            setPolyPoints([]);
+                        }}
+                        className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition"
+                    >
+                        取消
+                    </button>
+                    <button
+                        onClick={handleFinishDrawing}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold shadow-lg transition animate-pulse"
+                    >
+                        完成圈選
+                    </button>
+                  </>
+              )}
             </div>
           </div>
 
-          {/* Map Display */}
-          <div
-            className={`relative w-full aspect-[2/1] bg-slate-100 overflow-hidden group ${
-              mapState.isDrawing ? 'cursor-crosshair' : 'cursor-default'
-            }`}
-            onClick={handleMapClick}
-            onMouseMove={handleMouseMove}
-          >
-            {uploadedMapUrl ? (
-                <img 
-                  src={uploadedMapUrl} 
-                  alt="Campus Map" 
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover transition-transform duration-500 ease-out"
-                  onError={(e) => {
-                    e.target.onerror = null; 
-                    // Fallback or alert logic could go here, but keeping it simple
-                    // Often Google Drive links might 403 if not public
-                  }}
-                />
-            ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-400">
-                    <p>請輸入圖片連結</p>
-                </div>
-            )}
-
-            {/* Existing Areas Overlays */}
-            {areaMap.map((area) => (
-               <div
-                 key={area.id}
-                 className="absolute border-2 border-rose-500 bg-rose-500/20 hover:bg-rose-500/40 transition-all duration-200 group/area shadow-lg"
-                 style={{
-                   left: `${Math.min(area.x1, area.x2)}%`,
-                   top: `${Math.min(area.y1, area.y2)}%`,
-                   width: `${Math.abs(area.x2 - area.x1)}%`,
-                   height: `${Math.abs(area.y2 - area.y1)}%`,
-                 }}
-               >
-                 <span className="absolute -top-6 left-0 bg-rose-600 text-white text-xs px-2 py-0.5 rounded shadow-sm font-bold whitespace-nowrap z-10">
-                   {area.code} ({units.filter(u => u.areaCode === area.code).length})
-                 </span>
-                 <button
-                    className="absolute -top-2 -right-2 p-1 bg-white text-rose-600 rounded-full shadow-md opacity-0 group-hover/area:opacity-100 transition transform hover:scale-110 z-20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updatePrivateData({
-                        areaMap: areaMap.filter((a) => a.id !== area.id),
-                      });
-                    }}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-               </div>
-            ))}
-             {/* Drawing Box */}
-             {mapState.isDrawing && mapState.start && mapState.current && (
-              <div
-                className="absolute border-2 border-dashed border-yellow-400 bg-yellow-400/30"
-                style={{
-                  left: `${Math.min(mapState.start.x, mapState.current.x)}%`,
-                  top: `${Math.min(mapState.start.y, mapState.current.y)}%`,
-                  width: `${Math.abs(mapState.start.x - mapState.current.x)}%`,
-                  height: `${Math.abs(mapState.start.y - mapState.current.y)}%`,
+          {/* Map Display Container */}
+          <div className="flex-grow overflow-auto bg-slate-100 relative cursor-move">
+            <div 
+                className="relative origin-top-left transition-transform duration-200 ease-out"
+                style={{ 
+                    transform: `scale(${zoom})`,
+                    width: 'fit-content',
+                    height: 'fit-content'
                 }}
-              ></div>
-            )}
+            >
+                <div 
+                    className={`relative inline-block ${mapState.isDrawing ? 'cursor-crosshair' : 'cursor-default'}`}
+                    onClick={handleMapClick}
+                >
+                    {uploadedMapUrl ? (
+                        <img 
+                        src={uploadedMapUrl} 
+                        alt="Campus Map" 
+                        referrerPolicy="no-referrer"
+                        className="block max-w-none" 
+                        style={{ height: 'auto' }} // Let image define natural size
+                        onDragStart={(e) => e.preventDefault()}
+                        />
+                    ) : (
+                        <div className="w-[800px] h-[600px] flex items-center justify-center text-slate-400 bg-slate-200">
+                            <p>請輸入圖片連結</p>
+                        </div>
+                    )}
+
+                    {/* SVG Overlay for Polygons */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                        {/* Existing Areas */}
+                        {areaMap.map((area) => {
+                            // Support legacy rects and new polygons
+                            let pointsStr = "";
+                            let centerX = 0;
+                            let centerY = 0;
+
+                            if (area.type === 'polygon' && area.points) {
+                                pointsStr = area.points.map(p => `${p.x},${p.y}`).join(" ");
+                                // Calculate simple centroid
+                                centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
+                                centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+                            } else {
+                                // Legacy Rect Conversion
+                                const x1 = area.x1 || 0; const y1 = area.y1 || 0;
+                                const x2 = area.x2 || 0; const y2 = area.y2 || 0;
+                                const minX = Math.min(x1, x2); const maxX = Math.max(x1, x2);
+                                const minY = Math.min(y1, y2); const maxY = Math.max(y1, y2);
+                                pointsStr = `${minX},${minY} ${maxX},${minY} ${maxX},${maxY} ${minX},${maxY}`;
+                                centerX = (minX + maxX) / 2;
+                                centerY = (minY + maxY) / 2;
+                            }
+
+                            const unitInArea = units.filter(u => u.areaCode === area.code).length;
+
+                            return (
+                                <g key={area.id} className="group/area pointer-events-auto cursor-pointer">
+                                    <polygon
+                                        points={pointsStr}
+                                        fill="rgba(244, 63, 94, 0.2)"
+                                        stroke="#e11d48"
+                                        strokeWidth="0.5"
+                                        vectorEffect="non-scaling-stroke"
+                                        className="transition-all hover:fill-rose-500/40"
+                                    />
+                                    {/* Label */}
+                                    <text x={`${centerX}%`} y={`${centerY}%`} 
+                                          textAnchor="middle" dominantBaseline="middle" 
+                                          className="text-[0.2rem] fill-white font-bold pointer-events-none drop-shadow-md"
+                                          style={{ fontSize: '10px' }} // SVG coordinates are %, need absolute size for text readability or scale
+                                    >
+                                        {/* To make text visible regardless of zoom/size, we might need a foreignObject or just simple overlay divs. 
+                                            SVG text inside a % viewBox scales with it. Let's try foreignObject for better label.
+                                        */}
+                                    </text>
+                                    
+                                    {/* HTML Overlay for buttons/labels since SVG text scaling is tricky without complexity */}
+                                    <foreignObject x={`${centerX - 5}%`} y={`${centerY - 5}%`} width="10%" height="10%" className="overflow-visible">
+                                        <div className="flex flex-col items-center justify-center transform -translate-x-1/2 -translate-y-1/2 w-max">
+                                            <span className="bg-rose-600 text-white text-xs px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap mb-1">
+                                                {area.code} ({unitInArea})
+                                            </span>
+                                            <button
+                                                className="p-1 bg-white text-rose-600 rounded-full shadow-md opacity-0 group-hover/area:opacity-100 transition transform hover:scale-110"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    updatePrivateData({
+                                                        areaMap: areaMap.filter((a) => a.id !== area.id),
+                                                    });
+                                                }}
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    </foreignObject>
+                                </g>
+                            );
+                        })}
+
+                        {/* Currently Drawing Polygon */}
+                        {mapState.isDrawing && polyPoints.length > 0 && (
+                            <g>
+                                <polyline
+                                    points={polyPoints.map(p => `${p.x},${p.y}`).join(" ")}
+                                    fill="none"
+                                    stroke="#fbbf24"
+                                    strokeWidth="0.5"
+                                    strokeDasharray="1 1"
+                                    vectorEffect="non-scaling-stroke"
+                                />
+                                {polyPoints.map((p, i) => (
+                                    <circle cx={`${p.x}%`} cy={`${p.y}%`} r="0.5" fill="#fbbf24" key={i} />
+                                ))}
+                            </g>
+                        )}
+                    </svg>
+                </div>
+            </div>
           </div>
         </div>
 
