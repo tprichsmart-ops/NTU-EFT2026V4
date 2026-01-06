@@ -2124,7 +2124,6 @@ const App = () => {
                         src={uploadedMapUrl} 
                         alt="Campus Map" 
                         referrerPolicy="no-referrer"
-                        crossOrigin="anonymous" 
                         className="block max-w-none" 
                         style={{ height: 'auto' }} // Let image define natural size
                         onDragStart={(e) => e.preventDefault()}
