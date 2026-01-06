@@ -1663,7 +1663,7 @@ const App = () => {
         setNewAreaCode('');
     };
 
-    const handleConfirmArea = () => {
+    const handleConfirmArea = async () => {
         if (!newAreaCode.trim()) {
             alert("請輸入區域編號");
             return;
@@ -1683,7 +1683,7 @@ const App = () => {
             ...prev,
             settings: { ...prev.settings, areaMap: newAreaMap }
         }));
-        updatePrivateData({ areaMap: newAreaMap });
+        await updatePrivateData({ areaMap: newAreaMap });
         
         // Reset everything
         setMapState(p => ({ ...p, isDrawing: false, isNaming: false }));
@@ -1711,7 +1711,8 @@ const App = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const img = new Image();
-            img.crossOrigin = "anonymous"; // Try to request CORS permission
+            // REMOVE crossOrigin to allow display, but this means download will likely fail if tainted
+            // We handle the error below.
             img.src = uploadedMapUrl;
             
             await new Promise((resolve, reject) => {
@@ -1780,7 +1781,11 @@ const App = () => {
             
         } catch (e) {
             console.error("Download failed", e);
-            alert("下載失敗：可能是因為跨網域圖片權限問題 (CORS)。請嘗試使用本地上傳的圖片，或是確認雲端硬碟連結權限。");
+            if (e.name === 'SecurityError') {
+                 alert("因 Google 雲端硬碟安全性限制 (CORS)，瀏覽器無法程式化匯出這張合成圖。\n\n請使用電腦截圖功能保存：\n- Windows: Win + Shift + S\n- Mac: Cmd + Shift + 4");
+            } else {
+                 alert("下載失敗，請稍後再試。");
+            }
         } finally {
             setIsDownloadingMap(false);
         }
