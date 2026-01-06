@@ -45,7 +45,8 @@ import {
   Link as LinkIcon,
   ZoomIn,
   ZoomOut,
-  Undo
+  Undo,
+  Check
 } from 'lucide-react';
 
 // --- Global Firebase Configuration and Utility Functions ---
@@ -417,15 +418,9 @@ const App = () => {
             ...prev,
             settings: {
               ...initialSettings,
-              // Only override with saved data if it's NOT the uploadedMapUrl,
-              // or optionally, use the saved one. 
-              // Since the user asked to "directly embed", we prioritize the hardcoded one 
-              // for this session or ensure initialSettings.uploadedMapUrl is used if no custom one exists.
-              // However, to strictly follow "directly embed", we can force it here or just let initialSettings take precedence if DB is empty.
-              // But if the DB has an old URL, it might overwrite. 
-              // Let's force the hardcoded URL for the map to ensure the request is met even if old data exists.
               ...data,
-              uploadedMapUrl: initialSettings.uploadedMapUrl, // Force hardcoded URL
+              // Force overwrite uploadedMapUrl with hardcoded one to prevent loss
+              uploadedMapUrl: initialSettings.uploadedMapUrl, 
               guidelines: data.guidelines || initialSettings.guidelines,
               talkScripts: data.talkScripts || initialSettings.talkScripts,
               areaMap: data.areaMap || initialSettings.areaMap,
@@ -1628,25 +1623,27 @@ const App = () => {
 
     const [mapState, setMapState] = useState({
       isDrawing: false,
+      isNaming: false, // NEW STATE: For the naming modal
       start: null,
       current: null,
-      areaCodeInput: '',
       uploadedFile: null,
     });
 
-    const [zoom, setZoom] = useState(0.4); // Default zoom 40%
+    // Default Zoom set to 40%
+    const [zoom, setZoom] = useState(0.4); 
     const [polyPoints, setPolyPoints] = useState([]);
+    const [newAreaCode, setNewAreaCode] = useState(''); // State for modal input
 
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 5));
     const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.1));
 
     const handleMapClick = (e) => {
-        if (!mapState.isDrawing) return;
+        if (!mapState.isDrawing || mapState.isNaming) return;
 
         const rect = e.currentTarget.getBoundingClientRect();
-        // Calculate percentage based on the visible rect size
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        // Use offset from the image container div to get consistent coordinates
+        const x = (e.nativeEvent.offsetX / e.currentTarget.offsetWidth) * 100;
+        const y = (e.nativeEvent.offsetY / e.currentTarget.offsetHeight) * 100;
   
         setPolyPoints(prev => [...prev, {x, y}]);
     };
@@ -1655,34 +1652,47 @@ const App = () => {
         setPolyPoints(prev => prev.slice(0, -1));
     };
 
-    const handleFinishDrawing = () => {
+    const handleStartNaming = () => {
         if (polyPoints.length < 3) {
             alert('請至少標記 3 個點以形成區域');
             return;
         }
-        
-        // Confirm naming
-        const confirmedName = window.prompt("請為此區域命名 (區域編號)", "");
-        
-        if (confirmedName === null) return; // Cancelled
-        if (!confirmedName.trim()) {
-            alert("區域代號不能為空");
+        setMapState(p => ({ ...p, isNaming: true }));
+        setNewAreaCode('');
+    };
+
+    const handleConfirmArea = () => {
+        if (!newAreaCode.trim()) {
+            alert("請輸入區域編號");
             return;
         }
 
         const newArea = {
             id: crypto.randomUUID(),
-            code: confirmedName,
+            code: newAreaCode,
             type: 'polygon',
             points: polyPoints,
             unitCount: 0 
         };
 
-        updatePrivateData({ areaMap: [...areaMap, newArea] });
+        const newAreaMap = [...areaMap, newArea];
+        // Optimistic update
+        setAppData(prev => ({
+            ...prev,
+            settings: { ...prev.settings, areaMap: newAreaMap }
+        }));
+        updatePrivateData({ areaMap: newAreaMap });
         
-        // Reset state
-        setMapState(p => ({ ...p, isDrawing: false, areaCodeInput: '' }));
+        // Reset everything
+        setMapState(p => ({ ...p, isDrawing: false, isNaming: false }));
         setPolyPoints([]);
+        setNewAreaCode('');
+    };
+    
+    const handleCancelDrawing = () => {
+        setMapState(p => ({...p, isDrawing: false, isNaming: false}));
+        setPolyPoints([]);
+        setNewAreaCode('');
     };
 
     const handleMouseMove = (e) => {
@@ -1906,7 +1916,45 @@ const App = () => {
         </div>
 
         {/* Map Section */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col h-[800px]">
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col h-[800px] relative">
+          
+          {/* Map Naming Modal - Overlay */}
+          {mapState.isNaming && (
+             <div className="absolute inset-0 z-[100] bg-black/40 flex items-center justify-center backdrop-blur-sm animate-fade-in">
+                 <div className="bg-white p-6 rounded-2xl shadow-2xl w-96 transform scale-100 animate-slide-up border border-slate-200">
+                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <MapPin className="w-5 h-5 mr-2 text-indigo-600"/>
+                        確認區域編號
+                     </h3>
+                     <p className="text-sm text-slate-500 mb-4">
+                        您已圈選一個新區域，請輸入該區域的代號 (例如: A-01) 以利後續管理。
+                     </p>
+                     <input 
+                        type="text"
+                        autoFocus
+                        value={newAreaCode}
+                        onChange={(e) => setNewAreaCode(e.target.value)}
+                        className={`${styles.formInput} text-lg font-bold text-center tracking-widest`}
+                        placeholder="輸入編號"
+                     />
+                     <div className="flex justify-end space-x-3 mt-6">
+                        <button 
+                            onClick={handleCancelDrawing}
+                            className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+                        >
+                            放棄
+                        </button>
+                        <button 
+                            onClick={handleConfirmArea}
+                            className={`${styles.btnPrimary} bg-gradient-to-r from-indigo-600 to-blue-600`}
+                        >
+                            <Check className="w-4 h-4 mr-2"/> 確認建立
+                        </button>
+                     </div>
+                 </div>
+             </div>
+          )}
+
           <div className="p-5 bg-slate-800 text-white flex justify-between items-center flex-shrink-0 z-10 shadow-md">
             <h3 className="text-xl font-bold flex items-center">
               <MapPin className="w-5 h-5 mr-2" /> 校園地圖戰情室
@@ -1919,13 +1967,12 @@ const App = () => {
                </div>
 
                {/* Controls */}
-              {!mapState.isDrawing ? (
+              {!mapState.isDrawing && !mapState.isNaming ? (
                   <button
                     onClick={() =>
                       setMapState((p) => ({
                         ...p,
-                        isDrawing: true,
-                        areaCodeInput: ''
+                        isDrawing: true
                       }))
                     }
                     className={`px-4 py-2 rounded-lg font-medium transition shadow-sm flex items-center justify-center active:scale-95 border-transparent bg-indigo-600 hover:bg-indigo-500 text-white`}
@@ -1933,7 +1980,7 @@ const App = () => {
                   >
                     <Edit className="w-4 h-4 mr-2"/> 開始圈選
                   </button>
-              ) : (
+              ) : !mapState.isNaming ? (
                   <>
                     <button
                         onClick={handleUndoPoint}
@@ -1943,21 +1990,20 @@ const App = () => {
                         <Undo className="w-4 h-4"/>
                     </button>
                     <button
-                        onClick={() => {
-                            setMapState(p => ({...p, isDrawing: false}));
-                            setPolyPoints([]);
-                        }}
+                        onClick={handleCancelDrawing}
                         className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition"
                     >
                         取消
                     </button>
                     <button
-                        onClick={handleFinishDrawing}
+                        onClick={handleStartNaming}
                         className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold shadow-lg transition animate-pulse"
                     >
                         完成圈選
                     </button>
                   </>
+              ) : (
+                  <span className="text-sm text-indigo-200 animate-pulse">正在命名區域...</span>
               )}
             </div>
           </div>
@@ -1992,13 +2038,11 @@ const App = () => {
                     )}
 
                     {/* SVG Overlay for Polygons */}
-                    {/* ADDED VIEWBOX to match % coordinates (0-100) */}
+                    {/* FIXED: Removed vectorEffect="non-scaling-stroke" to fix disappearance issue with viewBox */}
                     <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                         {/* Existing Areas */}
                         {areaMap.map((area) => {
-                            // Support legacy rects and new polygons
                             let pointsStr = "";
-                            
                             if (area.type === 'polygon' && area.points) {
                                 pointsStr = area.points.map(p => `${p.x},${p.y}`).join(" ");
                             } else {
@@ -2014,24 +2058,24 @@ const App = () => {
                                 <g key={area.id} className={`group/area ${mapState.isDrawing ? 'pointer-events-none' : 'pointer-events-auto cursor-pointer'}`}>
                                     <polygon
                                         points={pointsStr}
-                                        fill="rgba(255, 0, 0, 0.3)" 
+                                        fill="rgba(239, 68, 68, 0.4)" 
                                         stroke="red"
-                                        strokeWidth="0.5" // use smaller width as viewBox is 100x100
-                                        className="transition-all hover:fill-red-500/50"
+                                        strokeWidth="0.5" 
+                                        className="transition-all hover:fill-red-500/60 hover:stroke-[0.8]"
                                     />
                                 </g>
                             );
                         })}
 
                         {/* Currently Drawing Polygon */}
-                        {mapState.isDrawing && polyPoints.length > 0 && (
+                        {polyPoints.length > 0 && (
                             <g>
                                 <polyline
                                     points={polyPoints.map(p => `${p.x},${p.y}`).join(" ")}
-                                    fill="none"
+                                    fill={mapState.isNaming ? "rgba(239, 68, 68, 0.4)" : "none"}
                                     stroke="red"
                                     strokeWidth="0.5"
-                                    strokeDasharray="1 1" // smaller dash for viewBox scale
+                                    strokeDasharray={mapState.isNaming ? "0" : "1 1"}
                                 />
                                 {polyPoints.map((p, i) => (
                                     <circle cx={p.x} cy={p.y} r="0.5" fill="white" stroke="red" strokeWidth="0.1" key={i} />
@@ -2041,7 +2085,7 @@ const App = () => {
                     </svg>
 
                     {/* Labels Layer (HTML Divs for better scaling and visibility) */}
-                    <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute inset-0 pointer-events-none z-10">
                         {areaMap.map((area) => {
                             let centerX = 0;
                             let centerY = 0;
@@ -2063,19 +2107,22 @@ const App = () => {
                                 <div 
                                     key={area.id}
                                     style={{ left: `${centerX}%`, top: `${centerY}%` }}
-                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 group/label flex flex-col items-center z-50 ${mapState.isDrawing ? 'pointer-events-none opacity-50' : 'pointer-events-auto'}`}
+                                    className={`absolute transform -translate-x-1/2 -translate-y-1/2 group/label flex flex-col items-center ${mapState.isDrawing ? 'opacity-30' : ''}`}
                                 >
-                                     <span className="bg-red-600 text-white text-xs px-2 py-1 rounded shadow-lg font-bold whitespace-nowrap border border-white">
-                                        {area.code} ({unitInArea})
+                                     <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap border border-white pointer-events-auto">
+                                        {area.code} {unitInArea > 0 && `(${unitInArea})`}
                                      </span>
                                      <button
-                                        className="mt-1 p-1 bg-white text-red-600 rounded-full shadow-md opacity-0 group-hover/label:opacity-100 transition transform hover:scale-110 border border-red-100"
+                                        className="mt-0.5 p-0.5 bg-white text-red-600 rounded-full shadow-md opacity-0 group-hover/label:opacity-100 transition transform hover:scale-110 border border-red-100 cursor-pointer pointer-events-auto"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             if(window.confirm(`確定要刪除區域 ${area.code} 嗎？`)) {
-                                                updatePrivateData({
-                                                    areaMap: areaMap.filter((a) => a.id !== area.id),
-                                                });
+                                                const newAreaMap = areaMap.filter((a) => a.id !== area.id);
+                                                setAppData(prev => ({
+                                                    ...prev,
+                                                    settings: { ...prev.settings, areaMap: newAreaMap }
+                                                }));
+                                                updatePrivateData({ areaMap: newAreaMap });
                                             }
                                         }}
                                         title="刪除區域"
