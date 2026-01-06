@@ -67,6 +67,7 @@ const safeParse = (data) => {
 
 // --- Google Drive Link Helper ---
 // Automatically converts Google Drive sharing links to embeddable image links
+// UPDATED: Uses the 'thumbnail' endpoint with large size (sz=w3000) to bypass virus scan warnings for large images
 const getEmbeddableMapUrl = (url) => {
   if (!url) return '';
   // Regex to extract File ID from common Google Drive link formats
@@ -74,8 +75,8 @@ const getEmbeddableMapUrl = (url) => {
   const match = url.match(driveRegex);
   
   if (match && match[1]) {
-    // Convert to the export=view format which works for <img> tags (if public)
-    return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    // Use thumbnail endpoint with width=3000px to ensure high quality and bypass virus scan interstitial pages
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w3000`;
   }
   return url;
 };
@@ -219,8 +220,8 @@ const initialSettings = {
     },
   ],
   areaMap: [],
-  // Hardcoded to the specific Google Drive image provided
-  uploadedMapUrl: 'https://drive.google.com/uc?export=view&id=1OKORexYM2Ws-F3E3_SOu9sX4deqAsi0E',
+  // Hardcoded to the specific Google Drive image provided using Thumbnail API (sz=w3000)
+  uploadedMapUrl: 'https://drive.google.com/thumbnail?id=1OKORexYM2Ws-F3E3_SOu9sX4deqAsi0E&sz=w3000',
 };
 
 // --- Custom Hook for Excel Export ---
