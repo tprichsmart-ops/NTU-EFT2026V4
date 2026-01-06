@@ -1611,8 +1611,8 @@ const App = () => {
       });
     }, [units, filter]);
 
-    // Default Zoom set to 40%
-    const [zoom, setZoom] = useState(0.4); 
+    // Default Zoom set to 70%
+    const [zoom, setZoom] = useState(0.7); 
 
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 5));
     const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.1));
@@ -2050,6 +2050,16 @@ const App = () => {
                     <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImport} />
                     <FileUp className="w-4 h-4 mr-1"/> 匯入資料
                  </label>
+                 <button 
+                    onClick={() => {
+                        setEditingUnitId(null);
+                        setIsNewUnit(true);
+                        setCurrentTab('record');
+                    }}
+                    className={`${styles.btnPrimary} py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700`}
+                 >
+                    <Plus className="w-4 h-4 mr-1"/> 新增單筆
+                 </button>
               </div>
               <div className="flex space-x-2">
                 <button
