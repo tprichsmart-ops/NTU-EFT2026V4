@@ -1634,21 +1634,17 @@ const App = () => {
       uploadedFile: null,
     });
 
-    const [zoom, setZoom] = useState(1);
+    const [zoom, setZoom] = useState(0.6); // Default zoom 60%
     const [polyPoints, setPolyPoints] = useState([]);
 
-    const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.2, 5));
-    const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.2, 0.5));
+    const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 5));
+    const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.1));
 
     const handleMapClick = (e) => {
         if (!mapState.isDrawing) return;
 
         const rect = e.currentTarget.getBoundingClientRect();
-        // Since we are clicking on the element that is scaled, the e.clientX/Y relative to the rect should be correct for the element's current visual state.
-        // However, we want percentage coordinates relative to the *original unscaled* content size if possible, or just relative to the current box.
-        // SVG percentage coordinates are relative to the bounding box of the SVG.
-        // The bounding client rect of the target (the div containing image and svg) already accounts for scale.
-        
+        // Calculate percentage based on the visible rect size
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
   
@@ -2015,14 +2011,9 @@ const App = () => {
                         {areaMap.map((area) => {
                             // Support legacy rects and new polygons
                             let pointsStr = "";
-                            let centerX = 0;
-                            let centerY = 0;
-
+                            
                             if (area.type === 'polygon' && area.points) {
                                 pointsStr = area.points.map(p => `${p.x},${p.y}`).join(" ");
-                                // Calculate simple centroid
-                                centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
-                                centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
                             } else {
                                 // Legacy Rect Conversion
                                 const x1 = area.x1 || 0; const y1 = area.y1 || 0;
@@ -2030,52 +2021,18 @@ const App = () => {
                                 const minX = Math.min(x1, x2); const maxX = Math.max(x1, x2);
                                 const minY = Math.min(y1, y2); const maxY = Math.max(y1, y2);
                                 pointsStr = `${minX},${minY} ${maxX},${minY} ${maxX},${maxY} ${minX},${maxY}`;
-                                centerX = (minX + maxX) / 2;
-                                centerY = (minY + maxY) / 2;
                             }
-
-                            const unitInArea = units.filter(u => u.areaCode === area.code).length;
 
                             return (
                                 <g key={area.id} className="group/area pointer-events-auto cursor-pointer">
                                     <polygon
                                         points={pointsStr}
-                                        fill="rgba(244, 63, 94, 0.2)"
-                                        stroke="#e11d48"
-                                        strokeWidth="0.5"
+                                        fill="rgba(255, 0, 0, 0.3)" 
+                                        stroke="red"
+                                        strokeWidth="2"
                                         vectorEffect="non-scaling-stroke"
-                                        className="transition-all hover:fill-rose-500/40"
+                                        className="transition-all hover:fill-red-500/50"
                                     />
-                                    {/* Label */}
-                                    <text x={`${centerX}%`} y={`${centerY}%`} 
-                                          textAnchor="middle" dominantBaseline="middle" 
-                                          className="text-[0.2rem] fill-white font-bold pointer-events-none drop-shadow-md"
-                                          style={{ fontSize: '10px' }} // SVG coordinates are %, need absolute size for text readability or scale
-                                    >
-                                        {/* To make text visible regardless of zoom/size, we might need a foreignObject or just simple overlay divs. 
-                                            SVG text inside a % viewBox scales with it. Let's try foreignObject for better label.
-                                        */}
-                                    </text>
-                                    
-                                    {/* HTML Overlay for buttons/labels since SVG text scaling is tricky without complexity */}
-                                    <foreignObject x={`${centerX - 5}%`} y={`${centerY - 5}%`} width="10%" height="10%" className="overflow-visible">
-                                        <div className="flex flex-col items-center justify-center transform -translate-x-1/2 -translate-y-1/2 w-max">
-                                            <span className="bg-rose-600 text-white text-xs px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap mb-1">
-                                                {area.code} ({unitInArea})
-                                            </span>
-                                            <button
-                                                className="p-1 bg-white text-rose-600 rounded-full shadow-md opacity-0 group-hover/area:opacity-100 transition transform hover:scale-110"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    updatePrivateData({
-                                                        areaMap: areaMap.filter((a) => a.id !== area.id),
-                                                    });
-                                                }}
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    </foreignObject>
                                 </g>
                             );
                         })}
@@ -2086,17 +2043,64 @@ const App = () => {
                                 <polyline
                                     points={polyPoints.map(p => `${p.x},${p.y}`).join(" ")}
                                     fill="none"
-                                    stroke="#fbbf24"
-                                    strokeWidth="0.5"
-                                    strokeDasharray="1 1"
+                                    stroke="red"
+                                    strokeWidth="2"
+                                    strokeDasharray="4 2"
                                     vectorEffect="non-scaling-stroke"
                                 />
                                 {polyPoints.map((p, i) => (
-                                    <circle cx={`${p.x}%`} cy={`${p.y}%`} r="0.5" fill="#fbbf24" key={i} />
+                                    <circle cx={`${p.x}%`} cy={`${p.y}%`} r="3" fill="white" stroke="red" strokeWidth="2" key={i} />
                                 ))}
                             </g>
                         )}
                     </svg>
+
+                    {/* Labels Layer (HTML Divs for better scaling and visibility) */}
+                    <div className="absolute inset-0 pointer-events-none">
+                        {areaMap.map((area) => {
+                            let centerX = 0;
+                            let centerY = 0;
+
+                            if (area.type === 'polygon' && area.points) {
+                                centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
+                                centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+                            } else {
+                                // Legacy Rect Conversion
+                                const x1 = area.x1 || 0; const y1 = area.y1 || 0;
+                                const x2 = area.x2 || 0; const y2 = area.y2 || 0;
+                                centerX = (Math.min(x1, x2) + Math.max(x1, x2)) / 2;
+                                centerY = (Math.min(y1, y2) + Math.max(y1, y2)) / 2;
+                            }
+
+                            const unitInArea = units.filter(u => u.areaCode === area.code).length;
+
+                            return (
+                                <div 
+                                    key={area.id}
+                                    style={{ left: `${centerX}%`, top: `${centerY}%` }}
+                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-auto group/label flex flex-col items-center"
+                                >
+                                     <span className="bg-red-600 text-white text-xs px-2 py-1 rounded shadow-lg font-bold whitespace-nowrap border border-white">
+                                        {area.code} ({unitInArea})
+                                     </span>
+                                     <button
+                                        className="mt-1 p-1 bg-white text-red-600 rounded-full shadow-md opacity-0 group-hover/label:opacity-100 transition transform hover:scale-110 border border-red-100"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if(window.confirm(`確定要刪除區域 ${area.code} 嗎？`)) {
+                                                updatePrivateData({
+                                                    areaMap: areaMap.filter((a) => a.id !== area.id),
+                                                });
+                                            }
+                                        }}
+                                        title="刪除區域"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
           </div>
