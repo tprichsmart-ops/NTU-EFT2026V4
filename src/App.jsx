@@ -219,7 +219,8 @@ const initialSettings = {
     },
   ],
   areaMap: [],
-  uploadedMapUrl: 'https://placehold.co/1200x600/3B82F6/FFFFFF?text=Paste+Image+URL',
+  // Hardcoded to the specific Google Drive image provided
+  uploadedMapUrl: 'https://drive.google.com/uc?export=view&id=1OKORexYM2Ws-F3E3_SOu9sX4deqAsi0E',
 };
 
 // --- Custom Hook for Excel Export ---
@@ -412,12 +413,18 @@ const App = () => {
             ...prev,
             settings: {
               ...initialSettings,
+              // Only override with saved data if it's NOT the uploadedMapUrl,
+              // or optionally, use the saved one. 
+              // Since the user asked to "directly embed", we prioritize the hardcoded one 
+              // for this session or ensure initialSettings.uploadedMapUrl is used if no custom one exists.
+              // However, to strictly follow "directly embed", we can force it here or just let initialSettings take precedence if DB is empty.
+              // But if the DB has an old URL, it might overwrite. 
+              // Let's force the hardcoded URL for the map to ensure the request is met even if old data exists.
               ...data,
+              uploadedMapUrl: initialSettings.uploadedMapUrl, // Force hardcoded URL
               guidelines: data.guidelines || initialSettings.guidelines,
               talkScripts: data.talkScripts || initialSettings.talkScripts,
               areaMap: data.areaMap || initialSettings.areaMap,
-              uploadedMapUrl:
-                data.uploadedMapUrl || initialSettings.uploadedMapUrl,
             },
             schedules: data.schedules || [],
             meetings: data.meetings || [],
@@ -1623,8 +1630,6 @@ const App = () => {
       uploadedFile: null,
     });
 
-    const [mapUrlInput, setMapUrlInput] = useState('');
-
     const handleMapClick = (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -1678,16 +1683,6 @@ const App = () => {
         const y = ((e.clientY - rect.top) / rect.height) * 100;
         setMapState((p) => ({ ...p, current: { x, y } }));
       };
-
-    // --- NEW: Handle Map URL Submission ---
-    const handleMapUrlSubmit = async () => {
-      if (!mapUrlInput) return;
-      
-      const finalUrl = getEmbeddableMapUrl(mapUrlInput);
-      await updatePrivateData({ uploadedMapUrl: finalUrl });
-      setGlobalMessage({ text: '地圖連結設定成功！', type: 'success' });
-      setMapUrlInput('');
-    };
 
     const deleteSelectedUnits = () => {
       if (
@@ -1943,24 +1938,6 @@ const App = () => {
               >
                 {mapState.isDrawing ? '點擊結束' : '圈選區域'}
               </button>
-
-              {/* URL Input Button */}
-              <div className="flex items-center bg-slate-700 rounded-lg p-1 border border-slate-600 ml-2">
-                <input 
-                  type="text" 
-                  placeholder="貼上圖片連結 (Google Drive/Imgur)" 
-                  className="bg-transparent text-white text-xs px-2 outline-none w-48 placeholder-slate-400"
-                  value={mapUrlInput}
-                  onChange={(e) => setMapUrlInput(e.target.value)} 
-                />
-                <button 
-                  onClick={handleMapUrlSubmit} 
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white p-1.5 rounded-md transition"
-                  title="設定圖片"
-                >
-                  <LinkIcon className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
 
