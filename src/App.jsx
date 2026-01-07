@@ -18,6 +18,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   runTransaction,
 } from 'firebase/firestore';
 import {
@@ -57,7 +58,8 @@ import {
   Calendar as CalendarIcon,
   Columns,
   Copy,
-  MessageSquare
+  MessageSquare,
+  Image
 } from 'lucide-react';
 
 // --- 1. 全域設定與工具 (Global Config & Utils) ---
@@ -574,6 +576,17 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
     const MeetingRow = ({ meeting }) => {
         const isEditing = editingMeetingId === meeting.id;
         const [editData, setEditData] = useState(meeting);
+        const [photoUrl, setPhotoUrl] = useState(null);
+
+        useEffect(() => {
+            // Load photo on demand
+            if (meeting.photoId) {
+                getDoc(doc(db, 'artifacts', appId, 'users', userId, 'meeting_photos', meeting.photoId))
+                    .then(snap => { if (snap.exists()) setPhotoUrl(snap.data().data); })
+                    .catch(err => console.error("Error loading photo", err));
+            }
+        }, [meeting.photoId, db, userId]);
+
         const handleSave = () => {
             const updated = appData.meetings.map(m => m.id === meeting.id ? editData : m);
             updatePrivateData({ meetings: updated });
@@ -581,7 +594,7 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
         };
         const handleCancel = () => { setEditData(meeting); setEditingMeetingId(null); };
         const copyContent = () => {
-             const text = `【戰勤會議紀錄】\n📅 本次日期：${meeting.date}\n👥 與會：${meeting.attendees}\n📝 總結：\n${meeting.summary}\n${meeting.image ? '[已附圖: ' + (meeting.imageName || '照片') + ']' : ''}\n📅 下次會議：${meeting.nextMeetingDate}\n👥 下次與會：${meeting.nextAttendees}\n💡 下次議題：\n${meeting.nextTopics}`;
+             const text = `【戰勤會議紀錄】\n📅 本次日期：${meeting.date}\n👥 與會：${meeting.attendees}\n📝 總結：\n${meeting.summary}\n${meeting.photoName ? '[已附圖: ' + meeting.photoName + ']' : ''}\n📅 下次會議：${meeting.nextMeetingDate}\n👥 下次與會：${meeting.nextAttendees}\n💡 下次議題：\n${meeting.nextTopics}`;
              setCopyModalContent(text);
         };
 
@@ -592,9 +605,9 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
                 <td className="p-2 align-top">{isEditing ? <input type="text" value={editData.attendees} onChange={e=>setEditData({...editData, attendees: e.target.value})} className={styles.formInput}/> : meeting.attendees}</td>
                 <td className="p-2 align-top">{isEditing ? <textarea value={editData.summary} onChange={e=>setEditData({...editData, summary: e.target.value})} className={styles.formTextarea} rows={3}/> : <div className="whitespace-pre-wrap">{meeting.summary}</div>}</td>
                 <td className="p-2 align-top text-center">
-                    {meeting.image ? (
-                        <a href={meeting.image} download={meeting.imageName || 'meeting_photo'} className="block w-16 h-16 bg-gray-100 border border-gray-300 rounded overflow-hidden hover:opacity-75 transition">
-                            <img src={meeting.image} alt="meeting" className="w-full h-full object-cover"/>
+                    {photoUrl ? (
+                        <a href={photoUrl} download={meeting.photoName || 'meeting_photo'} className="block w-16 h-16 bg-gray-100 border border-gray-300 rounded overflow-hidden hover:opacity-75 transition">
+                            <img src={photoUrl} alt="meeting" className="w-full h-full object-cover"/>
                         </a>
                     ) : <span className="text-xs text-gray-400">-</span>}
                 </td>
@@ -613,21 +626,49 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
     };
 
     const AddMeetingForm = () => {
-        const [newM, setNewM] = useState({ id: '', date: '', attendees: '', summary: '', nextMeetingDate: '', nextAttendees: '', nextTopics: '', image: '', imageName: '' });
+        const [newM, setNewM] = useState({ id: '', date: '', attendees: '', summary: '', nextMeetingDate: '', nextAttendees: '', nextTopics: '', photoData: null, photoName: '' });
         
         // Generate Preview Text Live
         const previewText = `【戰勤會議紀錄】\n` +
             `📅 本次日期：${newM.date || '(未填)'}\n` +
             `👥 與會人員：${newM.attendees || '(未填)'}\n` +
             `📝 會議總結：\n${newM.summary || '(無)'}\n` +
-            `${newM.image ? `[已附圖: ${newM.imageName}]` : ''}\n\n` +
+            `${newM.photoName ? `[已附圖: ${newM.photoName}]` : ''}\n\n` +
             `📅 下次預計：${newM.nextMeetingDate || '(未定)'}\n` +
             `👥 下次與會：${newM.nextAttendees || '(同上)'}\n` +
             `💡 下次議題：\n${newM.nextTopics || '(無)'}`;
 
-        const add = () => {
+        const add = async () => {
             if(!newM.date) { alert('請填寫日期'); return; }
-            updatePrivateData({ meetings: [...appData.meetings, { ...newM, id: crypto.randomUUID() }] });
+            let photoId = '';
+            if (newM.photoData) {
+                try {
+                    const docRef = await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'meeting_photos'), {
+                        data: newM.photoData,
+                        name: newM.photoName,
+                        createdAt: new Date().toISOString()
+                    });
+                    photoId = docRef.id;
+                } catch (e) {
+                    console.error("Photo upload error", e);
+                    alert("照片上傳失敗");
+                    return;
+                }
+            }
+
+            const meetingData = {
+                id: crypto.randomUUID(),
+                date: newM.date,
+                attendees: newM.attendees,
+                summary: newM.summary,
+                nextMeetingDate: newM.nextMeetingDate,
+                nextAttendees: newM.nextAttendees,
+                nextTopics: newM.nextTopics,
+                photoId: photoId,
+                photoName: newM.photoName
+            };
+
+            updatePrivateData({ meetings: [...appData.meetings, meetingData] });
             setIsAddingMeeting(false);
         };
 
@@ -637,7 +678,7 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
             if (file.size > 800 * 1024) { alert('圖片過大！請上傳小於 800KB 的圖片。'); return; }
             const reader = new FileReader();
             reader.onload = (event) => {
-                setNewM(prev => ({ ...prev, image: event.target.result, imageName: file.name }));
+                setNewM(prev => ({ ...prev, photoData: event.target.result, photoName: file.name }));
             };
             reader.readAsDataURL(file);
         };
@@ -664,7 +705,7 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
                     <InputGroup label="上傳照片 (選填, 800KB以下)">
                         <div className="flex items-center gap-2">
                             <input type="file" accept="image/*" onChange={handleImageSelect} className="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                            {newM.image && <span className="text-xs text-emerald-600 font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> 已選取</span>}
+                            {newM.photoName && <span className="text-xs text-emerald-600 font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> 已選取</span>}
                         </div>
                     </InputGroup>
                 </div>
@@ -973,7 +1014,7 @@ const App = () => {
   const [userId, setUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [globalMessage, setGlobalMessage] = useState({ text: '', type: '' });
-  const [appData, setAppData] = useState({ units: [], settings: initialSettings, schedules: [], meetings: [], files: [] });
+  const [appData, setAppData] = useState({ units: [], settings: initialSettings, schedules: [], meetings: [] });
   
   // Editing States
   const [editingUnitId, setEditingUnitId] = useState(null);
@@ -1022,7 +1063,6 @@ const App = () => {
               setDoc(doc(db, 'artifacts', appId, 'users', userId, 'settings', 'params'), { ...initialSettings, schedules: [], meetings: [] });
           }
       });
-      // Removed files listener as requested
       return () => { unsubUnits(); unsubSettings(); };
   }, [db, userId]);
 
