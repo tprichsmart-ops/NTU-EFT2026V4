@@ -55,7 +55,9 @@ import {
   Eye,
   FileText,
   Calendar as CalendarIcon,
-  Columns
+  Columns,
+  Copy,
+  MessageSquare
 } from 'lucide-react';
 
 // --- 全域 Firebase 設定與工具函式 ---
@@ -510,7 +512,13 @@ const useExcelExport = () => {
       headerLabels,
       ...data.map((row) =>
         headerKeys.map((key) => {
-          const value = row[key];
+          let value = row[key];
+          
+          // Handle nested custom data for schedules if key starts with 'customData.'
+          if (key.startsWith('customData.') && row.customData) {
+              value = row.customData[key.split('.')[1]];
+          }
+
           if (Array.isArray(value)) {
             return value
               .map((item) =>
@@ -1121,6 +1129,10 @@ const App = () => {
     const [selectedMeetingIds, setSelectedMeetingIds] = useState([]);
     const [isAddingMeeting, setIsAddingMeeting] = useState(false);
     const [editingMeetingId, setEditingMeetingId] = useState(null);
+    const [copyModalContent, setCopyModalContent] = useState(null);
+
+    // File Archive State
+    const [uploadFileName, setUploadFileName] = useState('');
 
     // Initialize local state from appData only once or when appData changes significantly (e.g. reload)
     useEffect(() => {
@@ -1190,6 +1202,20 @@ const App = () => {
         }
     };
 
+    const exportSchedules = () => {
+        const headers = [
+            { key: 'startDate', label: '開始日期', width: 15 },
+            { key: 'endDate', label: '結束日期', width: 15 },
+            { key: 'personnel', label: '人員/家數/區域', width: 30 },
+            { key: 'resourceContent', label: '資源配給內容', width: 20 },
+            { key: 'resource1', label: '配給月份/數量(1)', width: 15 },
+            { key: 'resource2', label: '配給月份/數量(2)', width: 15 },
+            { key: 'memo', label: '待辦&備忘', width: 40 },
+            ...customColumns.map(col => ({ key: `customData.${col.id}`, label: col.label, width: 20 }))
+        ];
+        exportToExcel(scheduleRows, '進攻排程表', '排程', headers);
+    };
+
     const getDayOfWeek = (dateStr) => {
         if (!dateStr) return '';
         const date = new Date(dateStr);
@@ -1207,14 +1233,43 @@ const App = () => {
 
     const exportMeetings = () => {
       const headers = [
-        { key: 'date', label: '日期', width: 15 },
+        { key: 'date', label: '本次會議日期', width: 15 },
         { key: 'attendees', label: '與會人員', width: 20 },
         { key: 'summary', label: '總結', width: 40 },
         { key: 'todo', label: '待辦', width: 40 },
-        { key: 'nextMeetingDate', label: '下次開會時間', width: 15 },
+        { key: 'nextMeetingDate', label: '下次預計會議', width: 15 },
+        { key: 'nextAttendees', label: '下次預訂與會人', width: 20 },
         { key: 'nextTopics', label: '下次議題', width: 30 },
       ];
       exportToExcel(appData.meetings, '戰勤會議紀錄', '會議紀錄', headers);
+    };
+
+    const openCopyModal = (meeting) => {
+        const text = `【戰勤會議紀錄】\n` +
+            `📅 本次日期：${meeting.date || '未填寫'}\n` +
+            `👥 與會人員：${meeting.attendees || '無'}\n` +
+            `📝 會議總結：\n${meeting.summary || '無'}\n\n` +
+            `📌 待辦事項：\n${meeting.todo || '無'}\n\n` +
+            `📅 下次預計開會：${meeting.nextMeetingDate || '未定'}\n` +
+            `👥 下次預訂與會：${meeting.nextAttendees || '同上'}\n` +
+            `💡 下次議題：\n${meeting.nextTopics || '無'}`;
+        setCopyModalContent(text);
+    };
+
+    const handleCopyText = () => {
+        if (!copyModalContent) return;
+        const textArea = document.createElement("textarea");
+        textArea.value = copyModalContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert('已複製到剪貼簿！');
+            setCopyModalContent(null);
+        } catch (err) {
+            alert('複製失敗，請手動複製');
+        }
+        document.body.removeChild(textArea);
     };
 
     // --- File Archive Logic ---
@@ -1227,18 +1282,22 @@ const App = () => {
             return;
         }
 
+        const finalName = uploadFileName.trim() || file.name;
+
         const reader = new FileReader();
         reader.onload = async (event) => {
             const base64String = event.target.result;
             try {
                 const filesRef = collection(db, 'artifacts', appId, 'users', userId, 'files');
                 await addDoc(filesRef, {
-                    name: file.name,
+                    name: finalName,
+                    originalName: file.name,
                     type: file.type,
                     data: base64String,
                     createdAt: new Date().toISOString()
                 });
                 setGlobalMessage({ text: '檔案上傳成功', type: 'success' });
+                setUploadFileName(''); // Reset input
             } catch (err) {
                 console.error("Upload failed", err);
                 alert("上傳失敗: " + err.message);
@@ -1274,6 +1333,7 @@ const App = () => {
             <tr className="hover:bg-indigo-50/30 transition">
                 <td className="p-3 align-top"><input type="checkbox" checked={selectedMeetingIds.includes(meeting.id)} onChange={() => setSelectedMeetingIds(p => p.includes(meeting.id) ? p.filter(id=>id!==meeting.id) : [...p, meeting.id])} className={styles.checkbox}/></td>
                 <td className="p-2 align-top">
+                    <span className="text-xs text-gray-400 block mb-1">本次日期</span>
                     {isEditing ? <input type="date" value={editData.date} onChange={e=>setEditData({...editData, date: e.target.value})} className={styles.formInput}/> : meeting.date}
                 </td>
                 <td className="p-2 align-top">
@@ -1286,7 +1346,12 @@ const App = () => {
                     {isEditing ? <textarea value={editData.todo} onChange={e=>setEditData({...editData, todo: e.target.value})} className={styles.formTextarea} rows={3}/> : <div className="whitespace-pre-wrap">{meeting.todo}</div>}
                 </td>
                 <td className="p-2 align-top">
-                    {isEditing ? <input type="date" value={editData.nextMeetingDate} onChange={e=>setEditData({...editData, nextMeetingDate: e.target.value})} className={styles.formInput} title="下次日期"/> : meeting.nextMeetingDate}
+                    <span className="text-xs text-gray-400 block mb-1">下次預計</span>
+                    {isEditing ? <input type="date" value={editData.nextMeetingDate} onChange={e=>setEditData({...editData, nextMeetingDate: e.target.value})} className={styles.formInput}/> : meeting.nextMeetingDate}
+                </td>
+                <td className="p-2 align-top">
+                    <span className="text-xs text-gray-400 block mb-1">下次與會</span>
+                    {isEditing ? <input type="text" value={editData.nextAttendees} onChange={e=>setEditData({...editData, nextAttendees: e.target.value})} className={styles.formInput}/> : meeting.nextAttendees}
                 </td>
                 <td className="p-2 align-top min-w-[200px]">
                     {isEditing ? <textarea value={editData.nextTopics} onChange={e=>setEditData({...editData, nextTopics: e.target.value})} className={styles.formTextarea} rows={4} placeholder="下次議題"/> : <div className="whitespace-pre-wrap">{meeting.nextTopics}</div>}
@@ -1298,7 +1363,10 @@ const App = () => {
                             <button onClick={handleCancel} className="p-1 text-gray-500 bg-gray-50 rounded hover:bg-gray-100"><X className="w-4 h-4"/></button>
                         </div>
                     ) : (
-                        <button onClick={() => setEditingMeetingId(meeting.id)} className="p-1 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100"><Edit className="w-4 h-4"/></button>
+                        <div className="flex flex-col space-y-1">
+                            <button onClick={() => setEditingMeetingId(meeting.id)} className="p-1 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100"><Edit className="w-4 h-4"/></button>
+                            <button onClick={() => openCopyModal(meeting)} className="p-1 text-gray-600 bg-gray-100 rounded hover:bg-gray-200" title="複製到 Line"><Copy className="w-4 h-4"/></button>
+                        </div>
                     )}
                 </td>
             </tr>
@@ -1306,7 +1374,7 @@ const App = () => {
     };
 
     const AddMeetingForm = () => {
-        const [newM, setNewM] = useState({ id: crypto.randomUUID(), date: '', attendees: '', summary: '', todo: '', nextMeetingDate: '', nextTopics: '' });
+        const [newM, setNewM] = useState({ id: crypto.randomUUID(), date: '', attendees: '', summary: '', todo: '', nextMeetingDate: '', nextAttendees: '', nextTopics: '' });
         const add = () => {
             updatePrivateData({ meetings: [...appData.meetings, newM] });
             setIsAddingMeeting(false);
@@ -1315,16 +1383,31 @@ const App = () => {
             <div className="p-4 bg-blue-50 rounded-lg mb-4 border border-blue-200">
                 <h4 className="font-bold text-blue-800 mb-2">新增會議紀錄</h4>
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                    <input type="date" className={styles.formInput} value={newM.date} onChange={e=>setNewM({...newM, date: e.target.value})} title="會議日期"/>
-                    <input type="text" className={styles.formInput} placeholder="與會人員" value={newM.attendees} onChange={e=>setNewM({...newM, attendees: e.target.value})} />
+                    <InputGroup label="本次開會日期">
+                        <input type="date" className={styles.formInput} value={newM.date} onChange={e=>setNewM({...newM, date: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="與會人員">
+                        <input type="text" className={styles.formInput} placeholder="與會人員" value={newM.attendees} onChange={e=>setNewM({...newM, attendees: e.target.value})} />
+                    </InputGroup>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                    <textarea className={styles.formTextarea} placeholder="總結" rows={3} value={newM.summary} onChange={e=>setNewM({...newM, summary: e.target.value})} />
-                    <textarea className={styles.formTextarea} placeholder="待辦" rows={3} value={newM.todo} onChange={e=>setNewM({...newM, todo: e.target.value})} />
+                    <InputGroup label="會議總結">
+                        <textarea className={styles.formTextarea} placeholder="總結" rows={3} value={newM.summary} onChange={e=>setNewM({...newM, summary: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="待辦事項">
+                        <textarea className={styles.formTextarea} placeholder="待辦" rows={3} value={newM.todo} onChange={e=>setNewM({...newM, todo: e.target.value})} />
+                    </InputGroup>
                 </div>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                    <input type="date" className={styles.formInput} value={newM.nextMeetingDate} onChange={e=>setNewM({...newM, nextMeetingDate: e.target.value})} title="下次會議日期"/>
-                    <textarea className={styles.formTextarea} placeholder="下次議題" rows={3} value={newM.nextTopics} onChange={e=>setNewM({...newM, nextTopics: e.target.value})} />
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                    <InputGroup label="下次預計開會日期">
+                        <input type="date" className={styles.formInput} value={newM.nextMeetingDate} onChange={e=>setNewM({...newM, nextMeetingDate: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="下次預訂與會人">
+                        <input type="text" className={styles.formInput} placeholder="人員" value={newM.nextAttendees} onChange={e=>setNewM({...newM, nextAttendees: e.target.value})} />
+                    </InputGroup>
+                    <InputGroup label="下次議題">
+                        <textarea className={styles.formTextarea} placeholder="議題" rows={3} value={newM.nextTopics} onChange={e=>setNewM({...newM, nextTopics: e.target.value})} />
+                    </InputGroup>
                 </div>
                 <div className="flex justify-end gap-2">
                     <button onClick={()=>setIsAddingMeeting(false)} className={styles.btnSecondary}>取消</button>
@@ -1364,6 +1447,9 @@ const App = () => {
                     </button>
                     <button onClick={handleDeleteSchedules} disabled={selectedScheduleIds.length===0} className={styles.btnDanger}>
                         <Trash2 className="w-4 h-4 mr-1"/> 刪除選取
+                    </button>
+                    <button onClick={exportSchedules} className={styles.btnInfo}>
+                        <Download className="w-4 h-4 mr-1"/> 匯出排程
                     </button>
                 </div>
             </div>
@@ -1458,11 +1544,12 @@ const App = () => {
                         <thead className="bg-slate-50 text-slate-500">
                             <tr>
                                 <th className="p-3 text-left w-10"><input type="checkbox" disabled className={styles.checkbox}/></th>
-                                <th className="p-3 text-left text-xs font-bold uppercase w-32">日期</th>
-                                <th className="p-3 text-left text-xs font-bold uppercase w-48">與會人員</th>
+                                <th className="p-3 text-left text-xs font-bold uppercase w-32">本次會議日期</th>
+                                <th className="p-3 text-left text-xs font-bold uppercase w-32">與會人員</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[200px]">總結</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[200px]">待辦</th>
-                                <th className="p-3 text-left text-xs font-bold uppercase w-32">下次開會</th>
+                                <th className="p-3 text-left text-xs font-bold uppercase w-32">下次預計會議</th>
+                                <th className="p-3 text-left text-xs font-bold uppercase w-32">下次與會人</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[250px]">下次議題</th>
                                 <th className="p-3 text-right text-xs font-bold uppercase w-20">操作</th>
                             </tr>
@@ -1477,17 +1564,45 @@ const App = () => {
             </div>
         </div>
 
+        {/* --- Copy Modal --- */}
+        {copyModalContent && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-indigo-600"/> 複製到 Line</h3>
+                    <textarea readOnly className="w-full h-64 p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono mb-4 focus:outline-none resize-none" value={copyModalContent}></textarea>
+                    <div className="flex justify-end gap-2">
+                        <button onClick={()=>setCopyModalContent(null)} className={styles.btnSecondary}>取消</button>
+                        <button onClick={handleCopyText} className={`${styles.btnPrimary} bg-emerald-600 hover:bg-emerald-700`}>
+                            <Copy className="w-4 h-4 mr-1"/> 一鍵複製
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* --- DATA ARCHIVE SECTION --- */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-            <div className="p-6 bg-gradient-to-r from-slate-100 to-gray-50 border-b border-slate-200 flex justify-between items-center">
+            <div className="p-6 bg-gradient-to-r from-slate-100 to-gray-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
                 <h3 className="text-xl font-bold text-slate-800 flex items-center">
                     <FileText className="w-5 h-5 mr-2" /> 資料備存 (文件/圖片)
                 </h3>
-                <div className="relative overflow-hidden group">
-                    <button className={`${styles.btnPrimary} bg-slate-700 hover:bg-slate-800`}>
-                        <UploadCloud className="w-4 h-4 mr-2"/> 上傳檔案
-                    </button>
-                    <input type="file" onChange={handleFileUpload} accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="absolute inset-0 opacity-0 cursor-pointer" />
+                <div className="flex items-center gap-2 w-full md:w-auto bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex-grow">
+                        <label className="text-xs font-bold text-slate-400 ml-1 block mb-1">自訂檔名 (選填)</label>
+                        <input 
+                            type="text" 
+                            placeholder="留空則使用原檔名" 
+                            value={uploadFileName} 
+                            onChange={(e) => setUploadFileName(e.target.value)} 
+                            className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-400 transition"
+                        />
+                    </div>
+                    <div className="relative overflow-hidden group flex-shrink-0 self-end">
+                        <button className={`${styles.btnPrimary} bg-slate-700 hover:bg-slate-800 h-10 px-4`}>
+                            <UploadCloud className="w-4 h-4 mr-2"/> 上傳
+                        </button>
+                        <input type="file" onChange={handleFileUpload} accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
                 </div>
             </div>
             
