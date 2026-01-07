@@ -479,7 +479,6 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
     const [isAddingMeeting, setIsAddingMeeting] = useState(false);
     const [editingMeetingId, setEditingMeetingId] = useState(null);
     const [copyModalContent, setCopyModalContent] = useState(null);
-    const [uploadFileName, setUploadFileName] = useState('');
 
     useEffect(() => {
         if(appData.schedules) setScheduleRows(appData.schedules);
@@ -572,41 +571,6 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
       exportToExcel(appData.meetings, '戰勤會議紀錄', '會議紀錄', headers);
     };
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        if (!db || !userId) { alert("資料庫未連線，請重新整理頁面"); return; } 
-        if (file.size > 800 * 1024) { alert('檔案過大！請上傳小於 800KB 的檔案。'); return; }
-
-        const finalName = uploadFileName.trim() || file.name;
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const base64String = event.target.result;
-            try {
-                const filesRef = collection(db, 'artifacts', appId, 'users', userId, 'files');
-                await addDoc(filesRef, {
-                    name: finalName,
-                    originalName: file.name,
-                    type: file.type,
-                    data: base64String,
-                    createdAt: new Date().toISOString()
-                });
-                setGlobalMessage({ text: '檔案上傳成功', type: 'success' });
-                setUploadFileName('');
-            } catch (err) {
-                console.error("Upload failed", err);
-                alert("上傳失敗: " + err.message);
-            }
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleDeleteFile = async (fileId) => {
-        if(confirm('確定刪除此檔案？')) {
-            try { await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'files', fileId)); } catch(e) { console.error(e); }
-        }
-    };
-
     const MeetingRow = ({ meeting }) => {
         const isEditing = editingMeetingId === meeting.id;
         const [editData, setEditData] = useState(meeting);
@@ -617,7 +581,7 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
         };
         const handleCancel = () => { setEditData(meeting); setEditingMeetingId(null); };
         const copyContent = () => {
-             const text = `【戰勤會議紀錄】\n📅 本次日期：${meeting.date}\n👥 與會：${meeting.attendees}\n📝 總結：\n${meeting.summary}\n\n📅 下次會議：${meeting.nextMeetingDate}\n👥 下次與會：${meeting.nextAttendees}\n💡 下次議題：\n${meeting.nextTopics}`;
+             const text = `【戰勤會議紀錄】\n📅 本次日期：${meeting.date}\n👥 與會：${meeting.attendees}\n📝 總結：\n${meeting.summary}\n${meeting.image ? '[已附圖: ' + (meeting.imageName || '照片') + ']' : ''}\n📅 下次會議：${meeting.nextMeetingDate}\n👥 下次與會：${meeting.nextAttendees}\n💡 下次議題：\n${meeting.nextTopics}`;
              setCopyModalContent(text);
         };
 
@@ -627,6 +591,13 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
                 <td className="p-2 align-top">{isEditing ? <input type="date" value={editData.date} onChange={e=>setEditData({...editData, date: e.target.value})} className={styles.formInput}/> : meeting.date}</td>
                 <td className="p-2 align-top">{isEditing ? <input type="text" value={editData.attendees} onChange={e=>setEditData({...editData, attendees: e.target.value})} className={styles.formInput}/> : meeting.attendees}</td>
                 <td className="p-2 align-top">{isEditing ? <textarea value={editData.summary} onChange={e=>setEditData({...editData, summary: e.target.value})} className={styles.formTextarea} rows={3}/> : <div className="whitespace-pre-wrap">{meeting.summary}</div>}</td>
+                <td className="p-2 align-top text-center">
+                    {meeting.image ? (
+                        <a href={meeting.image} download={meeting.imageName || 'meeting_photo'} className="block w-16 h-16 bg-gray-100 border border-gray-300 rounded overflow-hidden hover:opacity-75 transition">
+                            <img src={meeting.image} alt="meeting" className="w-full h-full object-cover"/>
+                        </a>
+                    ) : <span className="text-xs text-gray-400">-</span>}
+                </td>
                 <td className="p-2 align-top">{isEditing ? <input type="date" value={editData.nextMeetingDate} onChange={e=>setEditData({...editData, nextMeetingDate: e.target.value})} className={styles.formInput}/> : meeting.nextMeetingDate}</td>
                 <td className="p-2 align-top">{isEditing ? <input type="text" value={editData.nextAttendees} onChange={e=>setEditData({...editData, nextAttendees: e.target.value})} className={styles.formInput}/> : meeting.nextAttendees}</td>
                 <td className="p-2 align-top min-w-[200px]">{isEditing ? <textarea value={editData.nextTopics} onChange={e=>setEditData({...editData, nextTopics: e.target.value})} className={styles.formTextarea} rows={4}/> : <div className="whitespace-pre-wrap">{meeting.nextTopics}</div>}</td>
@@ -642,13 +613,14 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
     };
 
     const AddMeetingForm = () => {
-        const [newM, setNewM] = useState({ id: '', date: '', attendees: '', summary: '', nextMeetingDate: '', nextAttendees: '', nextTopics: '' });
+        const [newM, setNewM] = useState({ id: '', date: '', attendees: '', summary: '', nextMeetingDate: '', nextAttendees: '', nextTopics: '', image: '', imageName: '' });
         
         // Generate Preview Text Live
         const previewText = `【戰勤會議紀錄】\n` +
             `📅 本次日期：${newM.date || '(未填)'}\n` +
             `👥 與會人員：${newM.attendees || '(未填)'}\n` +
-            `📝 會議總結：\n${newM.summary || '(無)'}\n\n` +
+            `📝 會議總結：\n${newM.summary || '(無)'}\n` +
+            `${newM.image ? `[已附圖: ${newM.imageName}]` : ''}\n\n` +
             `📅 下次預計：${newM.nextMeetingDate || '(未定)'}\n` +
             `👥 下次與會：${newM.nextAttendees || '(同上)'}\n` +
             `💡 下次議題：\n${newM.nextTopics || '(無)'}`;
@@ -657,6 +629,17 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
             if(!newM.date) { alert('請填寫日期'); return; }
             updatePrivateData({ meetings: [...appData.meetings, { ...newM, id: crypto.randomUUID() }] });
             setIsAddingMeeting(false);
+        };
+
+        const handleImageSelect = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (file.size > 800 * 1024) { alert('圖片過大！請上傳小於 800KB 的圖片。'); return; }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                setNewM(prev => ({ ...prev, image: event.target.result, imageName: file.name }));
+            };
+            reader.readAsDataURL(file);
         };
 
         const copyPreview = () => {
@@ -677,6 +660,14 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
                     <InputGroup label="與會人員"><input type="text" className={styles.formInput} placeholder="與會人員" value={newM.attendees} onChange={e=>setNewM({...newM, attendees: e.target.value})} /></InputGroup>
                 </div>
                 <div className="mb-2"><InputGroup label="會議總結"><textarea className={styles.formTextarea} placeholder="總結" rows={3} value={newM.summary} onChange={e=>setNewM({...newM, summary: e.target.value})} /></InputGroup></div>
+                <div className="mb-2">
+                    <InputGroup label="上傳照片 (選填, 800KB以下)">
+                        <div className="flex items-center gap-2">
+                            <input type="file" accept="image/*" onChange={handleImageSelect} className="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                            {newM.image && <span className="text-xs text-emerald-600 font-bold flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> 已選取</span>}
+                        </div>
+                    </InputGroup>
+                </div>
                 <div className="grid grid-cols-3 gap-2 mb-4">
                     <InputGroup label="下次預計日期"><input type="date" className={styles.formInput} value={newM.nextMeetingDate} onChange={e=>setNewM({...newM, nextMeetingDate: e.target.value})} /></InputGroup>
                     <InputGroup label="下次預訂與會"><input type="text" className={styles.formInput} placeholder="人員" value={newM.nextAttendees} onChange={e=>setNewM({...newM, nextAttendees: e.target.value})} /></InputGroup>
@@ -793,6 +784,7 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
                                 <th className="p-3 text-left text-xs font-bold uppercase w-32">本次會議日期</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase w-32">與會人員</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[200px]">總結</th>
+                                <th className="p-3 text-left text-xs font-bold uppercase w-24 text-center">照片</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase w-32">下次預計會議</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase w-32">下次與會人</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[250px]">下次議題</th>
@@ -820,42 +812,6 @@ const Tab1Calendar = ({ appData, updatePrivateData, db, userId, setGlobalMessage
                 </div>
             </div>
         )}
-
-        {/* ARCHIVES */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-            <div className="p-6 bg-gradient-to-r from-slate-100 to-gray-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
-                <h3 className="text-xl font-bold text-slate-800 flex items-center"><FileText className="w-5 h-5 mr-2" /> 資料備存 (文件/圖片)</h3>
-                <div className="flex items-center gap-2 w-full md:w-auto bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
-                    <div className="flex-grow">
-                        <label className="text-xs font-bold text-slate-400 ml-1 block mb-1">自訂檔名 (選填)</label>
-                        <input type="text" placeholder="留空則使用原檔名" value={uploadFileName} onChange={(e) => setUploadFileName(e.target.value)} className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-400 transition" />
-                    </div>
-                    <div className="relative overflow-hidden group flex-shrink-0 self-end">
-                        <button className={`${styles.btnPrimary} bg-slate-700 hover:bg-slate-800 h-10 px-4`}><UploadCloud className="w-4 h-4 mr-2"/> 上傳</button>
-                        <input type="file" onChange={handleFileUpload} accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="absolute inset-0 opacity-0 cursor-pointer" />
-                    </div>
-                </div>
-            </div>
-            
-            <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {appData.files && appData.files.map(file => (
-                        <div key={file.id} className="border border-slate-200 rounded-xl p-4 hover:shadow-md transition bg-slate-50 relative group">
-                            <button onClick={()=>handleDeleteFile(file.id)} className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"><Trash2 className="w-4 h-4"/></button>
-                            <div className="flex items-center justify-center h-24 mb-3 bg-white rounded border border-slate-100 overflow-hidden">
-                                {file.type.startsWith('image/') ? <img src={file.data} alt={file.name} className="h-full object-contain"/> : <FileText className="w-12 h-12 text-slate-400"/>}
-                            </div>
-                            <p className="text-sm font-bold text-slate-700 truncate mb-1" title={file.name}>{file.name}</p>
-                            <p className="text-xs text-slate-400 mb-3">{new Date(file.createdAt).toLocaleDateString()}</p>
-                            <a href={file.data} download={file.name} className="block w-full text-center py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm hover:bg-slate-100 transition">下載</a>
-                        </div>
-                    ))}
-                    {(!appData.files || appData.files.length === 0) && (
-                        <div className="col-span-full py-8 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><UploadCloud className="w-10 h-10 mx-auto mb-2 opacity-50"/><p>尚無備存資料，請點擊右上角上傳</p><p className="text-xs mt-1 text-slate-300">(支援圖片、PDF、Office文件，限制 800KB 以下)</p></div>
-                    )}
-                </div>
-            </div>
-        </div>
       </div>
     );
 };
@@ -1066,10 +1022,8 @@ const App = () => {
               setDoc(doc(db, 'artifacts', appId, 'users', userId, 'settings', 'params'), { ...initialSettings, schedules: [], meetings: [] });
           }
       });
-      const unsubFiles = onSnapshot(collection(db, 'artifacts', appId, 'users', userId, 'files'), (snap) => {
-          setAppData(p => ({ ...p, files: snap.docs.map(d => ({ id: d.id, ...d.data() })) }));
-      });
-      return () => { unsubUnits(); unsubSettings(); unsubFiles(); };
+      // Removed files listener as requested
+      return () => { unsubUnits(); unsubSettings(); };
   }, [db, userId]);
 
   const updatePrivateData = async (fields) => {
