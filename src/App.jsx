@@ -58,7 +58,7 @@ import {
   Columns
 } from 'lucide-react';
 
-// --- Global Firebase Configuration and Utility Functions ---
+// --- 全域 Firebase 設定與工具函式 ---
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'ntu-strategy-default-app';
 
@@ -120,48 +120,30 @@ const downloadImportTemplate = () => {
   
   if (!ws['!dataValidation']) ws['!dataValidation'] = [];
 
-  for (let r = range.s.r; r <= range.e.r; ++r) {
-    ws['!dataValidation'].push({
-      sqref: window.XLSX.utils.encode_cell({r: r, c: 10}),
-      type: 'list',
-      operator: 'equal',
-      formula1: '"獨立空間,一般"',
-      showErrorMessage: true,
-      errorTitle: '輸入錯誤',
-      error: '請從下拉選單中選擇'
-    });
+  const setValidation = (colIndex, list) => {
+      for (let r = range.s.r; r <= range.e.r; ++r) {
+        ws['!dataValidation'].push({
+          sqref: window.XLSX.utils.encode_cell({r: r, c: colIndex}),
+          type: 'list',
+          operator: 'equal',
+          formula1: `"${list}"`,
+          showErrorMessage: true,
+          errorTitle: '輸入錯誤',
+          error: '請從下拉選單中選擇'
+        });
+      }
   }
 
-  for (let r = range.s.r; r <= range.e.r; ++r) {
-    ws['!dataValidation'].push({
-      sqref: window.XLSX.utils.encode_cell({r: r, c: 11}),
-      type: 'list',
-      operator: 'equal',
-      formula1: '"進攻中,已進攻暫定結案,本牌客戶"',
-      showErrorMessage: true,
-      errorTitle: '輸入錯誤',
-      error: '請從下拉選單中選擇'
-    });
-  }
-
-  for (let r = range.s.r; r <= range.e.r; ++r) {
-    ws['!dataValidation'].push({
-      sqref: window.XLSX.utils.encode_cell({r: r, c: 12}),
-      type: 'list',
-      operator: 'equal',
-      formula1: '"行政,學術"', 
-      showErrorMessage: true,
-      errorTitle: '輸入錯誤',
-      error: '請從下拉選單中選擇'
-    });
-  }
+  setValidation(10, "獨立空間,一般");
+  setValidation(11, "進攻中,已進攻暫定結案,本牌客戶");
+  setValidation(12, "行政,學術");
 
   const wb = window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(wb, ws, '匯入範例');
   window.XLSX.writeFile(wb, `進攻對象匯入範例_${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 
-// --- Styles Constants ---
+// --- 樣式常數 ---
 const styles = {
   formInput: "w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none",
   formSelect: "w-full px-4 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200 outline-none",
@@ -173,8 +155,7 @@ const styles = {
   checkbox: "w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
 };
 
-// --- Initial Data Structures for Defaults (MOVED UP) ---
-
+// --- 初始資料 ---
 const initialSettings = {
   buildings: [
     { name: '行政大樓', code: 'A1' },
@@ -211,10 +192,10 @@ const initialSettings = {
   ],
   areaMap: [],
   uploadedMapUrl: 'https://drive.google.com/thumbnail?id=1fmrcmaTr3qSeccln8If59g_eoPnDDY4J&sz=w3000',
-  customScheduleColumns: [] // New for dynamic columns
+  customScheduleColumns: []
 };
 
-// --- Reusable UI Components ---
+// --- 子組件定義 (移至 App 之前以解決 ReferenceError) ---
 
 const StatusCard = ({ title, value, icon, gradient }) => (
   <div
@@ -258,230 +239,79 @@ const FilterSelect = ({ label, value, onChange, children }) => (
   </div>
 );
 
-// 1. Add Unit Modal
-const AddUnitModal = ({ onClose, onSave, appData }) => {
-    const [formData, setFormData] = useState({
-        name: '',
-        buildingId: '',
-        floor: '',
-        roomNumber: '',
-        contactName1: '', contactPhone1: '',
-        contactName2: '', contactPhone2: '',
-        contactName3: '', contactPhone3: '',
-        subgroup: '',
-        attackStatus: 'engaged',
-        category: 'Academic',
-        areaCode: '',
-    });
-
-    const handleChange = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleSubmit = () => {
-        if (!formData.name || !formData.buildingId) {
-            alert('「單位名稱」與「棟別代號」為必填欄位。');
-            return;
-        }
-        onSave(formData);
-    };
-
+const EquipmentAdder = ({ availableBrands, availableModels, machineTypes, onAdd, equipmentSearch, setEquipmentSearch }) => {
+    const [plan, setPlan] = useState('');
+    const [vendor, setVendor] = useState('');
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-slate-200">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50 sticky top-0">
-                    <h3 className="text-xl font-bold text-slate-800 flex items-center">
-                        <Plus className="w-6 h-6 mr-2 text-indigo-600"/> 新增進攻對象 (基礎資料)
-                    </h3>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition"><X className="w-5 h-5"/></button>
-                </div>
-                
-                <div className="p-8 space-y-6">
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <InputGroup label="單位名稱 (必填)">
-                            <input type="text" value={formData.name} onChange={e => handleChange('name', e.target.value)} className={styles.formInput} placeholder="輸入單位名稱" autoFocus />
-                        </InputGroup>
-                        <InputGroup label="棟別代號 (必填)">
-                            <select value={formData.buildingId} onChange={e => handleChange('buildingId', e.target.value)} className={styles.formSelect}>
-                                <option value="">選擇棟別</option>
-                                {appData.settings.buildings.map(b => (
-                                    <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
-                                ))}
-                            </select>
-                        </InputGroup>
-                        
-                        <div className="grid grid-cols-2 gap-3 md:col-span-1">
-                             <InputGroup label="樓層">
-                                <input type="text" value={formData.floor} onChange={e => handleChange('floor', e.target.value)} className={styles.formInput} placeholder="e.g. 3F" />
-                             </InputGroup>
-                             <InputGroup label="科室/房號">
-                                <input type="text" value={formData.roomNumber} onChange={e => handleChange('roomNumber', e.target.value)} className={styles.formInput} placeholder="e.g. 302" />
-                             </InputGroup>
-                        </div>
-                    </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-4 rounded-lg shadow-sm border border-indigo-100 mb-4">
+            <select className={styles.formSelect} value={equipmentSearch.brand} onChange={e => setEquipmentSearch(p => ({...p, brand: e.target.value}))}>
+                <option value="">選擇廠牌</option>
+                {availableBrands.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select className={styles.formSelect} value={equipmentSearch.model} onChange={e => setEquipmentSearch(p => ({...p, model: e.target.value}))}>
+                <option value="">選擇型號</option>
+                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <input className={styles.formInput} placeholder="目前方案" value={plan} onChange={e => setPlan(e.target.value)} />
+            <input className={styles.formInput} placeholder="目前廠商" value={vendor} onChange={e => setVendor(e.target.value)} />
+            <button onClick={() => { if(equipmentSearch.brand && equipmentSearch.model) { onAdd({brand: equipmentSearch.brand, model: equipmentSearch.model, plan, vendor, type: '影印機'}); setPlan(''); setVendor(''); } }} className={`${styles.btnPrimary} col-span-2 md:col-span-4`}>新增設備</button>
+        </div>
+    );
+};
 
-                    {/* Contacts */}
-                    <div className="bg-gray-50/80 p-5 rounded-xl border border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                             <span className="text-xs font-bold text-indigo-600 block mb-2">承辦人 1 (主要)</span>
-                             <input type="text" placeholder="姓名" value={formData.contactName1} onChange={e => handleChange('contactName1', e.target.value)} className={styles.formInput} />
-                             <input type="text" placeholder="電話" value={formData.contactPhone1} onChange={e => handleChange('contactPhone1', e.target.value)} className={styles.formInput} />
-                        </div>
-                        <div className="space-y-2">
-                             <span className="text-xs font-bold text-gray-500 block mb-2">承辦人 2</span>
-                             <input type="text" placeholder="姓名" value={formData.contactName2} onChange={e => handleChange('contactName2', e.target.value)} className={styles.formInput} />
-                             <input type="text" placeholder="電話" value={formData.contactPhone2} onChange={e => handleChange('contactPhone2', e.target.value)} className={styles.formInput} />
-                        </div>
-                        <div className="space-y-2">
-                             <span className="text-xs font-bold text-gray-500 block mb-2">承辦人 3</span>
-                             <input type="text" placeholder="姓名" value={formData.contactName3} onChange={e => handleChange('contactName3', e.target.value)} className={styles.formInput} />
-                             <input type="text" placeholder="電話" value={formData.contactPhone3} onChange={e => handleChange('contactPhone3', e.target.value)} className={styles.formInput} />
-                        </div>
-                    </div>
-
-                    {/* Classification */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <InputGroup label="單位類別">
-                            <select value={formData.category} onChange={e => handleChange('category', e.target.value)} className={styles.formSelect}>
-                                <option value="Academic">學術單位</option>
-                                <option value="Administrative">行政單位</option>
-                            </select>
-                        </InputGroup>
-                        <InputGroup label="獨立空間分組">
-                            <select value={formData.subgroup} onChange={e => handleChange('subgroup', e.target.value)} className={styles.formSelect}>
-                                <option value="">一般</option>
-                                <option value="獨立空間">獨立空間</option>
-                            </select>
-                        </InputGroup>
-                        <InputGroup label="進攻狀態">
-                            <select value={formData.attackStatus} onChange={e => handleChange('attackStatus', e.target.value)} className={styles.formSelect}>
-                                <option value="engaged">進攻中</option>
-                                <option value="settled_non_client">已進攻暫定結案</option>
-                                <option value="client">本牌客戶</option>
-                            </select>
-                        </InputGroup>
-                    </div>
-                </div>
-
-                <div className="p-6 border-t border-gray-100 flex justify-end space-x-3 bg-gray-50 rounded-b-2xl">
-                    <button onClick={onClose} className="px-6 py-2 bg-white text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">取消</button>
-                    <button onClick={handleSubmit} className={`${styles.btnPrimary} px-8`}>確認新增</button>
-                </div>
+const EquipmentList = ({ equipment, setNewUnitData, history }) => (
+    <div className="space-y-3">
+        {equipment.map(eq => (
+            <div key={eq.id} className="p-3 bg-white border border-indigo-200 rounded-lg flex justify-between items-center">
+                <div><span className="font-bold">{eq.brand} {eq.model}</span> <span className="text-xs text-gray-500">({eq.plan})</span></div>
+                <button onClick={() => setNewUnitData(p => ({...p, equipment: p.equipment.filter(e => e.id !== eq.id)}))} className="text-red-400 p-1"><Trash2 className="w-4 h-4"/></button>
             </div>
-        </div>
-    );
-};
+        ))}
+    </div>
+);
 
-// 2. Unit Preview Modal
-const UnitPreviewModal = ({ unit, onClose }) => {
-    const equipment = safeParse(unit.equipment || '[]');
-    const history = safeParse(unit.history || '[]');
-
+const CharacteristicsEditor = ({ characteristics, setNewUnitData }) => {
+    const options = ["對價格敏感", "重視售後服務", "偏好特定廠牌", "有自行維修能力", "決策緩慢", "預算充足"];
+    const toggle = (val) => {
+        const next = characteristics.includes(val) ? characteristics.filter(c => c !== val) : [...characteristics, val];
+        setNewUnitData(p => ({...p, characteristics: next}));
+    };
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-slate-200">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-50/50 sticky top-0">
-                    <h3 className="text-xl font-bold text-indigo-900 flex items-center">
-                        <MapPin className="w-6 h-6 mr-2 text-indigo-600"/> 
-                        {unit.name} 
-                        <span className="ml-3 text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-medium">{unit.category === 'Academic' ? '學術' : '行政'}</span>
-                    </h3>
-                    <button onClick={onClose} className="p-2 hover:bg-indigo-100 text-indigo-600 rounded-full transition"><X className="w-6 h-6"/></button>
-                </div>
-
-                <div className="p-8 space-y-8">
-                    {/* Basic Info Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-white rounded-xl">
-                        <div className="md:col-span-1 space-y-4">
-                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">位置資訊</h4>
-                                 <p className="text-sm text-gray-800 mb-1"><span className="font-semibold">棟別:</span> {unit.buildingId}</p>
-                                 <p className="text-sm text-gray-800 mb-1"><span className="font-semibold">樓層:</span> {unit.floor || '-'}</p>
-                                 <p className="text-sm text-gray-800 mb-1"><span className="font-semibold">房號:</span> {unit.roomNumber || '-'}</p>
-                             </div>
-                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">狀態資訊</h4>
-                                 <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${unit.attackStatus === 'client' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                     {unit.attackStatus === 'client' ? '本牌客戶' : unit.attackStatus === 'settled_non_client' ? '暫定結案' : '進攻中'}
-                                 </span>
-                                 <p className="text-sm text-gray-600 mt-2">分組: {unit.subgroup || '一般'}</p>
-                             </div>
-                        </div>
-
-                        <div className="md:col-span-3">
-                             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6">
-                                 <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center"><User className="w-4 h-4 mr-2"/> 聯絡人資訊</h4>
-                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                     <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 border-l-4 border-l-indigo-400">
-                                         <span className="text-xs text-indigo-500 font-bold mb-1 block">主要負責人</span>
-                                         <p className="font-bold text-gray-800">{unit.contactName1 || '-'}</p>
-                                         <p className="text-sm text-gray-500">{unit.contactPhone1 || '-'}</p>
-                                     </div>
-                                     <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100">
-                                         <span className="text-xs text-gray-400 font-bold mb-1 block">第二聯絡人</span>
-                                         <p className="font-bold text-gray-700">{unit.contactName2 || '-'}</p>
-                                         <p className="text-sm text-gray-500">{unit.contactPhone2 || '-'}</p>
-                                     </div>
-                                     <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100">
-                                         <span className="text-xs text-gray-400 font-bold mb-1 block">第三聯絡人</span>
-                                         <p className="font-bold text-gray-700">{unit.contactName3 || '-'}</p>
-                                         <p className="text-sm text-gray-500">{unit.contactPhone3 || '-'}</p>
-                                     </div>
-                                 </div>
-                             </div>
-
-                             {/* Equipment & Linked History */}
-                             <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                                 <Printer className="w-5 h-5 mr-2 text-indigo-600"/> 設備與履歷預覽
-                             </h4>
-                             <div className="space-y-4">
-                                 {(equipment || []).map((eq, idx) => (
-                                     <div key={idx} className="border border-indigo-100 rounded-xl overflow-hidden shadow-sm">
-                                         <div className="bg-gradient-to-r from-indigo-50 to-white p-4 flex justify-between items-center border-b border-indigo-50">
-                                             <div>
-                                                 <span className="font-bold text-slate-800 text-lg">{eq.brand} {eq.model}</span>
-                                                 <span className="ml-2 text-xs bg-white border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded-full">{eq.type}</span>
-                                             </div>
-                                             <div className="text-right text-sm text-slate-600">
-                                                 <span className="mr-3 bg-white px-2 py-1 rounded border border-gray-100">方案: <span className="font-semibold text-indigo-600">{eq.plan || '未指定'}</span></span>
-                                                 <span className="bg-white px-2 py-1 rounded border border-gray-100">廠商: <span className="font-semibold text-indigo-600">{eq.vendor || '未指定'}</span></span>
-                                             </div>
-                                         </div>
-                                         <div className="p-4 bg-white">
-                                             <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
-                                                <History className="w-3 h-3 mr-1"/> 最近 10 筆相關拜訪
-                                             </h5>
-                                             <div className="space-y-1">
-                                                 {history
-                                                     ?.filter(h => h.relatedEquipmentId === eq.id)
-                                                     .sort((a, b) => new Date(b.date) - new Date(a.date))
-                                                     .slice(0, 10)
-                                                     .map(log => (
-                                                         <div key={log.id} className="text-sm grid grid-cols-12 gap-2 text-slate-600 hover:bg-slate-50 p-1.5 rounded transition">
-                                                             <span className="col-span-3 font-mono text-xs text-slate-400">{log.date}</span>
-                                                             <span className="col-span-9 font-medium">{log.activity}</span>
-                                                         </div>
-                                                     ))
-                                                 }
-                                                 {(!history?.some(h => h.relatedEquipmentId === eq.id)) && (
-                                                     <p className="text-xs text-gray-300 italic py-1">此設備尚無專屬拜訪紀錄</p>
-                                                 )}
-                                             </div>
-                                         </div>
-                                     </div>
-                                 ))}
-                                 {(equipment || []).length === 0 && <p className="text-center text-gray-400 py-4 bg-gray-50 rounded-xl">尚無設備資料</p>}
-                             </div>
-                        </div>
-                    </div>
-                </div>
-             </div>
+        <div className="flex flex-wrap gap-2">
+            {options.map(opt => (
+                <button key={opt} onClick={() => toggle(opt)} className={`px-3 py-1 text-xs rounded-full border transition ${characteristics.includes(opt) ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>{opt}</button>
+            ))}
         </div>
     );
 };
 
-// --- Unit Table Component ---
+const HistoryLogAdder = ({ onAdd, equipmentList }) => {
+    const [activity, setActivity] = useState('');
+    const [relatedId, setRelatedId] = useState('');
+    return (
+        <div className="space-y-3 mb-4">
+            <select className={styles.formSelect} value={relatedId} onChange={e => setRelatedId(e.target.value)}>
+                <option value="">選擇關聯設備 (選填)</option>
+                {equipmentList.map(e => <option key={e.id} value={e.id}>{e.brand} {e.model}</option>)}
+            </select>
+            <textarea className={styles.formTextarea} placeholder="輸入拜訪紀錄內容..." value={activity} onChange={e => setActivity(e.target.value)} rows="2" />
+            <button onClick={() => { if(activity) { onAdd({activity, relatedEquipmentId: relatedId}); setActivity(''); setRelatedId(''); } }} className={styles.btnPrimary}>紀錄拜訪</button>
+        </div>
+    );
+};
+
+const HistoryLogList = ({ history }) => (
+    <div className="space-y-2 mt-4 max-h-60 overflow-y-auto">
+        {history.sort((a,b) => new Date(b.date) - new Date(a.date)).map(h => (
+            <div key={h.id} className="text-xs p-2 bg-white rounded border border-emerald-100 flex justify-between">
+                <span className="text-emerald-700 font-mono">{h.date}</span>
+                <span className="flex-1 ml-3 text-gray-700">{h.activity}</span>
+            </div>
+        ))}
+    </div>
+);
+
+// UnitTable (Moved up)
 const UnitTable = ({ units, selectedUnitIds, setSelectedUnitIds, onViewUnit }) => {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -536,7 +366,115 @@ const UnitTable = ({ units, selectedUnitIds, setSelectedUnitIds, onViewUnit }) =
   );
 };
 
-// --- Custom Hook for Excel Export ---
+// UnitPreviewModal (Moved up)
+const UnitPreviewModal = ({ unit, onClose }) => {
+    const equipment = safeParse(unit.equipment || '[]');
+    const history = safeParse(unit.history || '[]');
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-slate-200">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-50/50 sticky top-0">
+                    <h3 className="text-xl font-bold text-indigo-900 flex items-center">
+                        <MapPin className="w-6 h-6 mr-2 text-indigo-600"/> 
+                        {unit.name} 
+                        <span className="ml-3 text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-medium">{unit.category === 'Academic' ? '學術' : '行政'}</span>
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-indigo-100 text-indigo-600 rounded-full transition"><X className="w-6 h-6"/></button>
+                </div>
+
+                <div className="p-8 space-y-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-white rounded-xl">
+                        <div className="md:col-span-1 space-y-4">
+                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">位置資訊</h4>
+                                 <p className="text-sm text-gray-800 mb-1"><span className="font-semibold">棟別:</span> {unit.buildingId}</p>
+                                 <p className="text-sm text-gray-800 mb-1"><span className="font-semibold">樓層:</span> {unit.floor || '-'}</p>
+                                 <p className="text-sm text-gray-800 mb-1"><span className="font-semibold">房號:</span> {unit.roomNumber || '-'}</p>
+                             </div>
+                             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">狀態資訊</h4>
+                                 <span className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${unit.attackStatus === 'client' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                     {unit.attackStatus === 'client' ? '本牌客戶' : unit.attackStatus === 'settled_non_client' ? '暫定結案' : '進攻中'}
+                                 </span>
+                                 <p className="text-sm text-gray-600 mt-2">分組: {unit.subgroup || '一般'}</p>
+                             </div>
+                        </div>
+
+                        <div className="md:col-span-3">
+                             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6">
+                                 <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center"><User className="w-4 h-4 mr-2"/> 聯絡人資訊</h4>
+                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                     <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100 border-l-4 border-l-indigo-400">
+                                         <span className="text-xs text-indigo-500 font-bold mb-1 block">主要負責人</span>
+                                         <p className="font-bold text-gray-800">{unit.contactName1 || '-'}</p>
+                                         <p className="text-sm text-gray-500">{unit.contactPhone1 || '-'}</p>
+                                     </div>
+                                     <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100">
+                                         <span className="text-xs text-gray-400 font-bold mb-1 block">第二聯絡人</span>
+                                         <p className="font-bold text-gray-700">{unit.contactName2 || '-'}</p>
+                                         <p className="text-sm text-gray-500">{unit.contactPhone2 || '-'}</p>
+                                     </div>
+                                     <div className="bg-white p-3 rounded-lg shadow-sm border border-slate-100">
+                                         <span className="text-xs text-gray-400 font-bold mb-1 block">第三聯絡人</span>
+                                         <p className="font-bold text-gray-700">{unit.contactName3 || '-'}</p>
+                                         <p className="text-sm text-gray-500">{unit.contactPhone3 || '-'}</p>
+                                     </div>
+                                 </div>
+                             </div>
+
+                             <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                                 <Printer className="w-5 h-5 mr-2 text-indigo-600"/> 設備與履歷預覽
+                             </h4>
+                             <div className="space-y-4">
+                                 {(equipment || []).map((eq, idx) => (
+                                     <div key={idx} className="border border-indigo-100 rounded-xl overflow-hidden shadow-sm">
+                                         <div className="bg-gradient-to-r from-indigo-50 to-white p-4 flex justify-between items-center border-b border-indigo-50">
+                                             <div>
+                                                 <span className="font-bold text-slate-800 text-lg">{eq.brand} {eq.model}</span>
+                                                 <span className="ml-2 text-xs bg-white border border-indigo-200 text-indigo-600 px-2 py-0.5 rounded-full">{eq.type}</span>
+                                             </div>
+                                             <div className="text-right text-sm text-slate-600">
+                                                 <span className="mr-3 bg-white px-2 py-1 rounded border border-gray-100">方案: <span className="font-semibold text-indigo-600">{eq.plan || '未指定'}</span></span>
+                                                 <span className="bg-white px-2 py-1 rounded border border-gray-100">廠商: <span className="font-semibold text-indigo-600">{eq.vendor || '未指定'}</span></span>
+                                             </div>
+                                         </div>
+                                         <div className="p-4 bg-white">
+                                             <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
+                                                <History className="w-3 h-3 mr-1"/> 最近 10 筆相關拜訪
+                                             </h5>
+                                             <div className="space-y-1">
+                                                 {history
+                                                     ?.filter(h => h.relatedEquipmentId === eq.id)
+                                                     .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                                     .slice(0, 10)
+                                                     .map(log => (
+                                                         <div key={log.id} className="text-sm grid grid-cols-12 gap-2 text-slate-600 hover:bg-slate-50 p-1.5 rounded transition">
+                                                             <span className="col-span-3 font-mono text-xs text-slate-400">{log.date}</span>
+                                                             <span className="col-span-9 font-medium">{log.activity}</span>
+                                                         </div>
+                                                     ))
+                                                 }
+                                                 {(!history?.some(h => h.relatedEquipmentId === eq.id)) && (
+                                                     <p className="text-xs text-gray-300 italic py-1">此設備尚無專屬拜訪紀錄</p>
+                                                 )}
+                                             </div>
+                                         </div>
+                                     </div>
+                                 ))}
+                                 {(equipment || []).length === 0 && <p className="text-center text-gray-400 py-4 bg-gray-50 rounded-xl">尚無設備資料</p>}
+                             </div>
+                        </div>
+                    </div>
+                </div>
+             </div>
+        </div>
+    );
+};
+
+// AddUnitModal (Already defined above)
+
+// Excel Hook (Already defined above)
 const useExcelExport = () => {
   useEffect(() => {
     if (typeof window.XLSX === 'undefined') {
@@ -608,7 +546,7 @@ const useExcelExport = () => {
   return exportToExcel;
 };
 
-// --- App Initialization and State Management ---
+// --- App 主程式 ---
 
 const App = () => {
   const [currentTab, setCurrentTab] = useState('targets');
@@ -624,7 +562,7 @@ const App = () => {
     settings: initialSettings,
     schedules: [],
     meetings: [],
-    files: [], // New for file archive
+    files: [], // 檔案備存
   });
 
   // Unit Editing State
@@ -633,7 +571,7 @@ const App = () => {
   const [newUnitData, setNewUnitData] = useState({});
   const [recordFilter, setRecordFilter] = useState({ type: '', area: '' });
   
-  // MODAL STATES FOR TAB 3
+  // MODAL STATES
   const [showAddUnitModal, setShowAddUnitModal] = useState(false);
   const [previewUnit, setPreviewUnit] = useState(null); 
 
@@ -742,7 +680,7 @@ const App = () => {
               guidelines: data.guidelines || initialSettings.guidelines,
               talkScripts: data.talkScripts || initialSettings.talkScripts,
               areaMap: data.areaMap || initialSettings.areaMap,
-              customScheduleColumns: data.customScheduleColumns || [] // Load custom columns
+              customScheduleColumns: data.customScheduleColumns || []
             },
             schedules: data.schedules || [],
             meetings: data.meetings || [],
@@ -997,7 +935,7 @@ const App = () => {
           </InputGroup>
 
           <div className="grid grid-cols-2 gap-2">
-             <InputGroup label="樓層">
+            <InputGroup label="樓層">
                 <input
                 type="text"
                 value={newUnitData.floor || ''}
@@ -1018,7 +956,7 @@ const App = () => {
           </div>
 
           <div className="col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
-             <div>
+            <div>
                 <InputGroup label="承辦 1 (主要)">
                     <div className="flex gap-1 mb-1">
                         <User className="w-4 h-4 text-gray-400 mt-3"/>
@@ -1029,8 +967,8 @@ const App = () => {
                         <input type="text" value={newUnitData.contactPhone1 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone1: e.target.value}))} className={styles.formInput} placeholder="電話" />
                     </div>
                 </InputGroup>
-             </div>
-             <div>
+            </div>
+            <div>
                 <InputGroup label="承辦 2">
                     <div className="flex gap-1 mb-1">
                         <User className="w-4 h-4 text-gray-400 mt-3"/>
@@ -1041,8 +979,8 @@ const App = () => {
                         <input type="text" value={newUnitData.contactPhone2 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone2: e.target.value}))} className={styles.formInput} placeholder="電話" />
                     </div>
                 </InputGroup>
-             </div>
-             <div>
+            </div>
+            <div>
                 <InputGroup label="承辦 3">
                     <div className="flex gap-1 mb-1">
                         <User className="w-4 h-4 text-gray-400 mt-3"/>
@@ -1053,7 +991,7 @@ const App = () => {
                         <input type="text" value={newUnitData.contactPhone3 || ''} onChange={(e) => setNewUnitData(p => ({...p, contactPhone3: e.target.value}))} className={styles.formInput} placeholder="電話" />
                     </div>
                 </InputGroup>
-             </div>
+            </div>
           </div>
 
           <InputGroup label="獨立空間分組">
@@ -1121,7 +1059,7 @@ const App = () => {
           </div>
           
           <div className="space-y-6">
-             <div className="bg-amber-50/50 p-6 rounded-xl border border-amber-100">
+            <div className="bg-amber-50/50 p-6 rounded-xl border border-amber-100">
                 <h4 className="text-lg font-bold mb-4 text-amber-800 flex items-center">
                 <Target className="w-5 h-5 mr-2" />
                 客戶特性
@@ -1169,23 +1107,26 @@ const App = () => {
         </div>
       </div>
     );
-};
+  };
 
-  // --- Tab 1: 進攻行事曆 (Revised) ---
+  // --- Tab 1: 進攻行事曆 ---
   const Tab1Calendar = () => {
     // State for Schedules
     const [selectedScheduleIds, setSelectedScheduleIds] = useState([]);
-    const [scheduleRows, setScheduleRows] = useState([]); // Use local state for editing, sync with DB
+    const [scheduleRows, setScheduleRows] = useState([]); // Use local state for editing
     const [newColumnName, setNewColumnName] = useState('');
     const [bulkAddCount, setBulkAddCount] = useState(1);
 
     // State for Meetings
     const [selectedMeetingIds, setSelectedMeetingIds] = useState([]);
     const [isAddingMeeting, setIsAddingMeeting] = useState(false);
+    const [editingMeetingId, setEditingMeetingId] = useState(null);
 
-    // Sync from appData to local state for schedules
+    // Initialize local state from appData only once or when appData changes significantly (e.g. reload)
     useEffect(() => {
-        setScheduleRows(appData.schedules || []);
+        if(appData.schedules) {
+            setScheduleRows(appData.schedules);
+        }
     }, [appData.schedules]);
 
     // --- Schedule Logic ---
@@ -1218,12 +1159,12 @@ const App = () => {
             memo: '',
             customData: {}
         }));
-        const updatedSchedules = [...scheduleRows, ...newRows];
-        updatePrivateData({ schedules: updatedSchedules });
+        // Update local state ONLY
+        setScheduleRows(prev => [...prev, ...newRows]);
     };
 
     const handleScheduleChange = (id, field, value, isCustom = false) => {
-        const updatedSchedules = scheduleRows.map(row => {
+        setScheduleRows(prevRows => prevRows.map(row => {
             if (row.id === id) {
                 if (isCustom) {
                     return { ...row, customData: { ...row.customData, [field]: value } };
@@ -1231,8 +1172,7 @@ const App = () => {
                 return { ...row, [field]: value };
             }
             return row;
-        });
-        setScheduleRows(updatedSchedules); // Optimistic update
+        }));
     };
 
     const handleSaveSchedules = () => {
@@ -1244,7 +1184,8 @@ const App = () => {
         if (selectedScheduleIds.length === 0) return;
         if (confirm(`確定刪除選取的 ${selectedScheduleIds.length} 筆排程？`)) {
             const updatedSchedules = scheduleRows.filter(s => !selectedScheduleIds.includes(s.id));
-            updatePrivateData({ schedules: updatedSchedules });
+            setScheduleRows(updatedSchedules); // Update UI immediately
+            updatePrivateData({ schedules: updatedSchedules }); // Sync DB
             setSelectedScheduleIds([]);
         }
     };
@@ -1256,12 +1197,24 @@ const App = () => {
         return `(${days[date.getDay()]})`;
     };
 
-    // --- Meeting Logic (Simplified from previous, adjusted UI) ---
+    // --- Meeting Logic ---
     const deleteSelectedMeetings = () => {
-       if (selectedMeetingIds.length === 0) return;
-       const updatedMeetings = appData.meetings.filter(m => !selectedMeetingIds.includes(m.id));
-       updatePrivateData({ meetings: updatedMeetings });
-       setSelectedMeetingIds([]);
+      if (selectedMeetingIds.length === 0) return;
+      const updatedMeetings = appData.meetings.filter(m => !selectedMeetingIds.includes(m.id));
+      updatePrivateData({ meetings: updatedMeetings });
+      setSelectedMeetingIds([]);
+    };
+
+    const exportMeetings = () => {
+      const headers = [
+        { key: 'date', label: '日期', width: 15 },
+        { key: 'attendees', label: '與會人員', width: 20 },
+        { key: 'summary', label: '總結', width: 40 },
+        { key: 'todo', label: '待辦', width: 40 },
+        { key: 'nextMeetingDate', label: '下次開會時間', width: 15 },
+        { key: 'nextTopics', label: '下次議題', width: 30 },
+      ];
+      exportToExcel(appData.meetings, '戰勤會議紀錄', '會議紀錄', headers);
     };
 
     // --- File Archive Logic ---
@@ -1269,7 +1222,6 @@ const App = () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Size check (Limit to 800KB to be safe for Firestore)
         if (file.size > 800 * 1024) {
             alert('檔案過大！請上傳小於 800KB 的檔案。');
             return;
@@ -1304,22 +1256,51 @@ const App = () => {
     };
 
     const MeetingRow = ({ meeting }) => {
-        const [localMeeting, setLocalMeeting] = useState(meeting);
-        const handleChange = (field, value) => setLocalMeeting(p => ({...p, [field]: value}));
-        const handleBlur = () => {
-            const updated = appData.meetings.map(m => m.id === meeting.id ? localMeeting : m);
+        const isEditing = editingMeetingId === meeting.id;
+        const [editData, setEditData] = useState(meeting);
+
+        const handleSave = () => {
+            const updated = appData.meetings.map(m => m.id === meeting.id ? editData : m);
             updatePrivateData({ meetings: updated });
+            setEditingMeetingId(null);
+        };
+
+        const handleCancel = () => {
+            setEditData(meeting);
+            setEditingMeetingId(null);
         };
 
         return (
             <tr className="hover:bg-indigo-50/30 transition">
-                <td className="p-3"><input type="checkbox" checked={selectedMeetingIds.includes(meeting.id)} onChange={() => setSelectedMeetingIds(p => p.includes(meeting.id) ? p.filter(id=>id!==meeting.id) : [...p, meeting.id])} className={styles.checkbox}/></td>
-                <td className="p-2"><input type="date" value={localMeeting.date} onChange={e=>handleChange('date', e.target.value)} onBlur={handleBlur} className={styles.formInput}/></td>
-                <td className="p-2"><input type="text" value={localMeeting.attendees} onChange={e=>handleChange('attendees', e.target.value)} onBlur={handleBlur} className={styles.formInput}/></td>
-                <td className="p-2"><textarea value={localMeeting.summary} onChange={e=>handleChange('summary', e.target.value)} onBlur={handleBlur} className={styles.formTextarea} rows={2}/></td>
-                <td className="p-2"><textarea value={localMeeting.todo} onChange={e=>handleChange('todo', e.target.value)} onBlur={handleBlur} className={styles.formTextarea} rows={2}/></td>
-                <td className="p-2"><input type="date" value={localMeeting.nextMeetingDate} onChange={e=>handleChange('nextMeetingDate', e.target.value)} onBlur={handleBlur} className={styles.formInput} title="下次日期"/></td>
-                <td className="p-2 min-w-[200px]"><textarea value={localMeeting.nextTopics} onChange={e=>handleChange('nextTopics', e.target.value)} onBlur={handleBlur} className={styles.formTextarea} rows={3} placeholder="下次議題"/></td>
+                <td className="p-3 align-top"><input type="checkbox" checked={selectedMeetingIds.includes(meeting.id)} onChange={() => setSelectedMeetingIds(p => p.includes(meeting.id) ? p.filter(id=>id!==meeting.id) : [...p, meeting.id])} className={styles.checkbox}/></td>
+                <td className="p-2 align-top">
+                    {isEditing ? <input type="date" value={editData.date} onChange={e=>setEditData({...editData, date: e.target.value})} className={styles.formInput}/> : meeting.date}
+                </td>
+                <td className="p-2 align-top">
+                    {isEditing ? <input type="text" value={editData.attendees} onChange={e=>setEditData({...editData, attendees: e.target.value})} className={styles.formInput}/> : meeting.attendees}
+                </td>
+                <td className="p-2 align-top">
+                    {isEditing ? <textarea value={editData.summary} onChange={e=>setEditData({...editData, summary: e.target.value})} className={styles.formTextarea} rows={3}/> : <div className="whitespace-pre-wrap">{meeting.summary}</div>}
+                </td>
+                <td className="p-2 align-top">
+                    {isEditing ? <textarea value={editData.todo} onChange={e=>setEditData({...editData, todo: e.target.value})} className={styles.formTextarea} rows={3}/> : <div className="whitespace-pre-wrap">{meeting.todo}</div>}
+                </td>
+                <td className="p-2 align-top">
+                    {isEditing ? <input type="date" value={editData.nextMeetingDate} onChange={e=>setEditData({...editData, nextMeetingDate: e.target.value})} className={styles.formInput} title="下次日期"/> : meeting.nextMeetingDate}
+                </td>
+                <td className="p-2 align-top min-w-[200px]">
+                    {isEditing ? <textarea value={editData.nextTopics} onChange={e=>setEditData({...editData, nextTopics: e.target.value})} className={styles.formTextarea} rows={4} placeholder="下次議題"/> : <div className="whitespace-pre-wrap">{meeting.nextTopics}</div>}
+                </td>
+                <td className="p-2 align-top text-right">
+                    {isEditing ? (
+                        <div className="flex flex-col space-y-1">
+                            <button onClick={handleSave} className="p-1 text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100"><Save className="w-4 h-4"/></button>
+                            <button onClick={handleCancel} className="p-1 text-gray-500 bg-gray-50 rounded hover:bg-gray-100"><X className="w-4 h-4"/></button>
+                        </div>
+                    ) : (
+                        <button onClick={() => setEditingMeetingId(meeting.id)} className="p-1 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100"><Edit className="w-4 h-4"/></button>
+                    )}
+                </td>
             </tr>
         );
     };
@@ -1334,12 +1315,16 @@ const App = () => {
             <div className="p-4 bg-blue-50 rounded-lg mb-4 border border-blue-200">
                 <h4 className="font-bold text-blue-800 mb-2">新增會議紀錄</h4>
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                    <input type="date" className={styles.formInput} value={newM.date} onChange={e=>setNewM({...newM, date: e.target.value})} />
+                    <input type="date" className={styles.formInput} value={newM.date} onChange={e=>setNewM({...newM, date: e.target.value})} title="會議日期"/>
                     <input type="text" className={styles.formInput} placeholder="與會人員" value={newM.attendees} onChange={e=>setNewM({...newM, attendees: e.target.value})} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                    <textarea className={styles.formTextarea} placeholder="總結" rows={2} value={newM.summary} onChange={e=>setNewM({...newM, summary: e.target.value})} />
-                    <textarea className={styles.formTextarea} placeholder="待辦" rows={2} value={newM.todo} onChange={e=>setNewM({...newM, todo: e.target.value})} />
+                    <textarea className={styles.formTextarea} placeholder="總結" rows={3} value={newM.summary} onChange={e=>setNewM({...newM, summary: e.target.value})} />
+                    <textarea className={styles.formTextarea} placeholder="待辦" rows={3} value={newM.todo} onChange={e=>setNewM({...newM, todo: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                    <input type="date" className={styles.formInput} value={newM.nextMeetingDate} onChange={e=>setNewM({...newM, nextMeetingDate: e.target.value})} title="下次會議日期"/>
+                    <textarea className={styles.formTextarea} placeholder="下次議題" rows={3} value={newM.nextTopics} onChange={e=>setNewM({...newM, nextTopics: e.target.value})} />
                 </div>
                 <div className="flex justify-end gap-2">
                     <button onClick={()=>setIsAddingMeeting(false)} className={styles.btnSecondary}>取消</button>
@@ -1362,10 +1347,10 @@ const App = () => {
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
             <div className="p-6 bg-gradient-to-r from-orange-100 to-amber-50 border-b border-orange-200 flex flex-wrap justify-between items-center gap-4">
                 <div>
-                     <h3 className="text-xl font-bold text-orange-900 flex items-center">
+                    <h3 className="text-xl font-bold text-orange-900 flex items-center">
                         <CalendarIcon className="w-5 h-5 mr-2" /> 進攻排程
-                     </h3>
-                     <p className="text-xs text-orange-700 mt-1">批量新增以快速編輯，支援自訂欄位擴充</p>
+                    </h3>
+                    <p className="text-xs text-orange-700 mt-1">批量新增以快速編輯，支援自訂欄位擴充 (編輯後請記得按儲存)</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex items-center bg-white rounded-lg border border-orange-200 p-1">
@@ -1418,24 +1403,24 @@ const App = () => {
                                 </td>
                                 <td className="p-2 border-r border-slate-200">
                                     <div className="flex flex-col gap-1">
-                                        <div className="flex items-center text-xs text-slate-500"><span className="w-6">起:</span><input type="date" value={row.startDate} onChange={e=>handleScheduleChange(row.id, 'startDate', e.target.value)} className="bg-transparent outline-none border-b border-transparent focus:border-indigo-300 w-full"/> <span className="ml-1 text-[10px]">{getDayOfWeek(row.startDate)}</span></div>
-                                        <div className="flex items-center text-xs text-slate-500"><span className="w-6">訖:</span><input type="date" value={row.endDate} onChange={e=>handleScheduleChange(row.id, 'endDate', e.target.value)} className="bg-transparent outline-none border-b border-transparent focus:border-indigo-300 w-full"/> <span className="ml-1 text-[10px]">{getDayOfWeek(row.endDate)}</span></div>
+                                        <div className="flex items-center text-xs text-slate-500"><span className="w-6">起:</span><input type="date" value={row.startDate || ''} onChange={e=>handleScheduleChange(row.id, 'startDate', e.target.value)} className="bg-transparent outline-none border-b border-transparent focus:border-indigo-300 w-full"/> <span className="ml-1 text-[10px]">{getDayOfWeek(row.startDate)}</span></div>
+                                        <div className="flex items-center text-xs text-slate-500"><span className="w-6">訖:</span><input type="date" value={row.endDate || ''} onChange={e=>handleScheduleChange(row.id, 'endDate', e.target.value)} className="bg-transparent outline-none border-b border-transparent focus:border-indigo-300 w-full"/> <span className="ml-1 text-[10px]">{getDayOfWeek(row.endDate)}</span></div>
                                     </div>
                                 </td>
                                 <td className="p-2 bg-indigo-50/10 border-r border-indigo-100">
-                                    <textarea value={row.personnel} onChange={e=>handleScheduleChange(row.id, 'personnel', e.target.value)} className="w-full bg-transparent outline-none resize-none text-sm text-slate-700 placeholder-indigo-200" rows={3} placeholder="填寫人員/家數..."/>
+                                    <textarea value={row.personnel || ''} onChange={e=>handleScheduleChange(row.id, 'personnel', e.target.value)} className="w-full bg-transparent outline-none resize-none text-sm text-slate-700 placeholder-indigo-200" rows={3} placeholder="填寫人員/家數..."/>
                                 </td>
                                 <td className="p-2 bg-emerald-50/10 border-r border-emerald-100">
-                                    <input type="text" value={row.resourceContent} onChange={e=>handleScheduleChange(row.id, 'resourceContent', e.target.value)} className="w-full bg-transparent outline-none text-sm border-b border-transparent focus:border-emerald-300" placeholder="內容"/>
+                                    <input type="text" value={row.resourceContent || ''} onChange={e=>handleScheduleChange(row.id, 'resourceContent', e.target.value)} className="w-full bg-transparent outline-none text-sm border-b border-transparent focus:border-emerald-300" placeholder="內容"/>
                                 </td>
                                 <td className="p-2 bg-emerald-50/10 border-r border-emerald-100">
-                                    <input type="text" value={row.resource1} onChange={e=>handleScheduleChange(row.id, 'resource1', e.target.value)} className="w-full bg-transparent outline-none text-sm border-b border-transparent focus:border-emerald-300" placeholder="月份/數量"/>
+                                    <input type="text" value={row.resource1 || ''} onChange={e=>handleScheduleChange(row.id, 'resource1', e.target.value)} className="w-full bg-transparent outline-none text-sm border-b border-transparent focus:border-emerald-300" placeholder="月份/數量"/>
                                 </td>
                                 <td className="p-2 bg-emerald-50/10 border-r border-emerald-100">
-                                    <input type="text" value={row.resource2} onChange={e=>handleScheduleChange(row.id, 'resource2', e.target.value)} className="w-full bg-transparent outline-none text-sm border-b border-transparent focus:border-emerald-300" placeholder="月份/數量"/>
+                                    <input type="text" value={row.resource2 || ''} onChange={e=>handleScheduleChange(row.id, 'resource2', e.target.value)} className="w-full bg-transparent outline-none text-sm border-b border-transparent focus:border-emerald-300" placeholder="月份/數量"/>
                                 </td>
                                 <td className="p-2 bg-amber-50/10 border-r border-amber-100">
-                                    <textarea value={row.memo} onChange={e=>handleScheduleChange(row.id, 'memo', e.target.value)} className="w-full bg-transparent outline-none resize-none text-sm text-slate-700 placeholder-amber-200" rows={3} placeholder="待辦事項..."/>
+                                    <textarea value={row.memo || ''} onChange={e=>handleScheduleChange(row.id, 'memo', e.target.value)} className="w-full bg-transparent outline-none resize-none text-sm text-slate-700 placeholder-amber-200" rows={3} placeholder="待辦事項..."/>
                                 </td>
                                 {customColumns.map(col => (
                                     <td key={col.id} className="p-2 border-r border-slate-200">
@@ -1456,18 +1441,19 @@ const App = () => {
 
         {/* --- MEETING SECTION --- */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-             <div className="p-6 bg-gradient-to-r from-blue-100 to-indigo-50 border-b border-blue-200 flex justify-between items-center">
+            <div className="p-6 bg-gradient-to-r from-blue-100 to-indigo-50 border-b border-blue-200 flex justify-between items-center">
                 <h3 className="text-xl font-bold text-blue-900 flex items-center">
                     <Users className="w-5 h-5 mr-2" /> 戰勤會議紀錄
                 </h3>
                 <div className="flex gap-2">
                     <button onClick={()=>setIsAddingMeeting(true)} className={styles.btnPrimary}><Plus className="w-4 h-4 mr-1"/> 新增紀錄</button>
                     <button onClick={deleteSelectedMeetings} disabled={selectedMeetingIds.length===0} className={styles.btnDanger}><Trash2 className="w-4 h-4 mr-1"/> 刪除</button>
+                    <button onClick={exportMeetings} className={styles.btnInfo}><Download className="w-4 h-4 mr-1"/> 匯出 Excel</button>
                 </div>
-             </div>
-             <div className="p-4">
-                 {isAddingMeeting && <AddMeetingForm />}
-                 <div className="overflow-x-auto">
+            </div>
+            <div className="p-4">
+                {isAddingMeeting && <AddMeetingForm />}
+                <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-slate-50 text-slate-500">
                             <tr>
@@ -1478,6 +1464,7 @@ const App = () => {
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[200px]">待辦</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase w-32">下次開會</th>
                                 <th className="p-3 text-left text-xs font-bold uppercase min-w-[250px]">下次議題</th>
+                                <th className="p-3 text-right text-xs font-bold uppercase w-20">操作</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
@@ -1486,22 +1473,22 @@ const App = () => {
                             ))}
                         </tbody>
                     </table>
-                 </div>
-             </div>
+                </div>
+            </div>
         </div>
 
         {/* --- DATA ARCHIVE SECTION --- */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
             <div className="p-6 bg-gradient-to-r from-slate-100 to-gray-50 border-b border-slate-200 flex justify-between items-center">
-                 <h3 className="text-xl font-bold text-slate-800 flex items-center">
+                <h3 className="text-xl font-bold text-slate-800 flex items-center">
                     <FileText className="w-5 h-5 mr-2" /> 資料備存 (文件/圖片)
-                 </h3>
-                 <div className="relative overflow-hidden group">
+                </h3>
+                <div className="relative overflow-hidden group">
                     <button className={`${styles.btnPrimary} bg-slate-700 hover:bg-slate-800`}>
                         <UploadCloud className="w-4 h-4 mr-2"/> 上傳檔案
                     </button>
                     <input type="file" onChange={handleFileUpload} accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" className="absolute inset-0 opacity-0 cursor-pointer" />
-                 </div>
+                </div>
             </div>
             
             <div className="p-6">
@@ -2250,78 +2237,5 @@ const App = () => {
     </div>
   );
 };
-
-// --- Missing Sub-components Helper ---
-const EquipmentAdder = ({ availableBrands, availableModels, machineTypes, onAdd, equipmentSearch, setEquipmentSearch }) => {
-    const [plan, setPlan] = useState('');
-    const [vendor, setVendor] = useState('');
-    return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-white p-4 rounded-lg shadow-sm border border-indigo-100 mb-4">
-            <select className={styles.formSelect} value={equipmentSearch.brand} onChange={e => setEquipmentSearch(p => ({...p, brand: e.target.value}))}>
-                <option value="">選擇廠牌</option>
-                {availableBrands.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <select className={styles.formSelect} value={equipmentSearch.model} onChange={e => setEquipmentSearch(p => ({...p, model: e.target.value}))}>
-                <option value="">選擇型號</option>
-                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <input className={styles.formInput} placeholder="目前方案" value={plan} onChange={e => setPlan(e.target.value)} />
-            <input className={styles.formInput} placeholder="目前廠商" value={vendor} onChange={e => setVendor(e.target.value)} />
-            <button onClick={() => { if(equipmentSearch.brand && equipmentSearch.model) { onAdd({brand: equipmentSearch.brand, model: equipmentSearch.model, plan, vendor, type: '影印機'}); setPlan(''); setVendor(''); } }} className={`${styles.btnPrimary} col-span-2 md:col-span-4`}>新增設備</button>
-        </div>
-    );
-};
-
-const EquipmentList = ({ equipment, setNewUnitData, history }) => (
-    <div className="space-y-3">
-        {equipment.map(eq => (
-            <div key={eq.id} className="p-3 bg-white border border-indigo-200 rounded-lg flex justify-between items-center">
-                <div><span className="font-bold">{eq.brand} {eq.model}</span> <span className="text-xs text-gray-500">({eq.plan})</span></div>
-                <button onClick={() => setNewUnitData(p => ({...p, equipment: p.equipment.filter(e => e.id !== eq.id)}))} className="text-red-400 p-1"><Trash2 className="w-4 h-4"/></button>
-            </div>
-        ))}
-    </div>
-);
-
-const CharacteristicsEditor = ({ characteristics, setNewUnitData }) => {
-    const options = ["對價格敏感", "重視售後服務", "偏好特定廠牌", "有自行維修能力", "決策緩慢", "預算充足"];
-    const toggle = (val) => {
-        const next = characteristics.includes(val) ? characteristics.filter(c => c !== val) : [...characteristics, val];
-        setNewUnitData(p => ({...p, characteristics: next}));
-    };
-    return (
-        <div className="flex flex-wrap gap-2">
-            {options.map(opt => (
-                <button key={opt} onClick={() => toggle(opt)} className={`px-3 py-1 text-xs rounded-full border transition ${characteristics.includes(opt) ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>{opt}</button>
-            ))}
-        </div>
-    );
-};
-
-const HistoryLogAdder = ({ onAdd, equipmentList }) => {
-    const [activity, setActivity] = useState('');
-    const [relatedId, setRelatedId] = useState('');
-    return (
-        <div className="space-y-3 mb-4">
-            <select className={styles.formSelect} value={relatedId} onChange={e => setRelatedId(e.target.value)}>
-                <option value="">選擇關聯設備 (選填)</option>
-                {equipmentList.map(e => <option key={e.id} value={e.id}>{e.brand} {e.model}</option>)}
-            </select>
-            <textarea className={styles.formTextarea} placeholder="輸入拜訪紀錄內容..." value={activity} onChange={e => setActivity(e.target.value)} rows="2" />
-            <button onClick={() => { if(activity) { onAdd({activity, relatedEquipmentId: relatedId}); setActivity(''); setRelatedId(''); } }} className={styles.btnPrimary}>紀錄拜訪</button>
-        </div>
-    );
-};
-
-const HistoryLogList = ({ history }) => (
-    <div className="space-y-2 mt-4 max-h-60 overflow-y-auto">
-        {history.sort((a,b) => new Date(b.date) - new Date(a.date)).map(h => (
-            <div key={h.id} className="text-xs p-2 bg-white rounded border border-emerald-100 flex justify-between">
-                <span className="text-emerald-700 font-mono">{h.date}</span>
-                <span className="flex-1 ml-3 text-gray-700">{h.activity}</span>
-            </div>
-        ))}
-    </div>
-);
 
 export default App;
